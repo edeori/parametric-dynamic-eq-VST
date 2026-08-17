@@ -1,7 +1,15 @@
 {
   "permissions": {
     "allow": [
-      "Read(//Users/mothproduction/Documents/VSCode/DeathWings-VST/Source/DSP/**)"
+      "Read(//Users/mothproduction/Documents/VSCode/DeathWings-VST/Source/DSP/**)",
+      "Read(//Users/mothproduction/Documents/VSCode/AdaptiveGate-VST/Source/**)",
+      "Read(//Users/mothproduction/Documents/VSCode/AdaptiveGate-VST/docs/**)",
+      "Read(//Users/mothproduction/Documents/VSCode/AdaptiveGate-VST/**)",
+      "Read(//Users/mothproduction/Documents/VSCode/AdaptiveGate-VST/Source/DSP/**)",
+      "Read(//Users/mothproduction/Documents/VSCode/AdaptiveGate-VST/Mockup/**)"
+    ],
+    "additionalDirectories": [
+      "/Users/mothproduction/Documents/VSCode/AdaptiveGate-VST/Source"
     ]
   }
 }

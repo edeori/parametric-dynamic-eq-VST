@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ParaDyn EQ — interactive UI mockup</title>
+<link rel="stylesheet" href="../../MothProduction-Shared-VST/UI/Mockup/moth-ui.css">
+<style>
+  /*
+    Design resolution: 1180 x 715 -- measured directly off Mockup/mockup+components.png's
+    own main-preview region (the source of truth for every ratio below). Every position/size
+    in this file is expressed as a percentage or an `fr` grid weight derived from that same
+    1180x715 box, never a hardcoded pixel -- so scaling --plugin-width (or the browser window)
+    rescales the whole UI uniformly, and the same ratios can be read straight off this file
+    when the real JUCE editor's resized() layout is written later (see PORTING.md).
+  */
+  .paradyneq {
+    --plugin-width: 1180px;
+    --plugin-ratio: 1.6503;
+    /* Sampled directly from the mockup's own dual-glow panel border. */
+    --accent: #56d8f5;
+    --accent-hot: #8be9ff;
+    --accent-rgb: 86, 216, 245;
+    --accent2: #9a91d6;
+    --accent2-hot: #c3bbf0;
+    --accent2-rgb: 154, 145, 214;
+    /* Relative to moth-ui.css's own location (MothProduction-Shared-VST/UI/Mockup/), not to
+       this HTML file -- a url() inside a custom property resolves against the stylesheet
+       where the var() substitution is *used* (moth-ui.css's .moth-plugin background rule),
+       same convention every sibling plugin's mockup already follows for this exact reason. */
+    --moth-background: url("../../../parametric-dynamic-eq-VST/Mockup/Assets/paradyneq-background.png");
+  }
+
+  /* ---------- Header: manufacturer+title (left) / logo (dead centre) / controls (right) ----------
+     Deliberately does NOT override moth-ui.css's own .moth-header display -- its native
+     `grid-template-columns: 1fr auto 1fr` is exactly what's needed here: the two flexible outer
+     columns absorb the left brand group and the (fairly wide) controls group while the centre
+     column stays auto-sized and truly centred between them, with no absolute-position overlap
+     risk if either side gets wider (an earlier position:absolute version of this collided with
+     the header-actions column at this exact plugin width). Still the same fixed 78px header
+     height as every other Moth Production plugin. */
+  .paradyneq .moth-header { padding: 0 2.46%; }
+  /* The background art's own corner fastener/screw decoration sits right at this same left
+     inset -- nudge the brand group further right so the two don't overlap, without touching
+     the header's overall side padding (which everything else still lines up against). */
+  .paradyn-left-brand { margin-left: 22px; display: flex; align-items: baseline; gap: 16px; }
+  .paradyn-title { margin: 0; font-family: "Oxanium", sans-serif; font-size: 20px; letter-spacing: .09em; text-transform: uppercase; color: #eef1f5; white-space: nowrap; }
+  .paradyn-title span { background: linear-gradient(90deg, var(--accent), var(--accent2-hot)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .paradyn-header-controls { justify-self: end; display: flex; align-items: center; justify-content: flex-end; gap: 14px; }
+  .paradyn-check { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #b9bec7; cursor: pointer; user-select: none; }
+  .paradyn-check input { appearance: none; width: 14px; height: 14px; margin: 0; border: 1px solid #444b56; border-radius: 3px; background: rgba(3,4,7,.7); display: grid; place-items: center; cursor: pointer; }
+  .paradyn-check input::after { content: ""; width: 8px; height: 8px; border-radius: 1px; background: var(--accent-hot); box-shadow: 0 0 6px var(--accent); opacity: 0; transition: opacity .12s; }
+  .paradyn-check input:checked::after { opacity: 1; }
+  .paradyn-inline-group { display: inline-flex; align-items: center; gap: 8px; }
+  .paradyn-inline-group .moth-select { min-width: 84px; height: 27px; font-size: 10px; }
+  /* Compact rotary Output control replacing the earlier linear slider (which read poorly at
+     header scale) and the settings-gear button (not needed). Sits at the end of the controls
+     column, pulled in from the header's own right inset -- the background art's corner
+     fastener lives right at that inset, same reason the left brand group got nudged in too. */
+  .paradyn-header-controls { margin-right: 22px; }
+  .paradyn-header-knob { display: flex; align-items: center; gap: 9px; }
+  .paradyn-header-knob-face { width: 34px; border-radius: 50%; overflow: hidden; }
+  .paradyn-header-knob-text { display: grid; line-height: 1.3; }
+  .paradyn-header-knob-text .moth-readout { font-size: 12px; }
+
+  /* ---------- Content grid: fr-weighted rows so every gap/panel keeps its measured ratio
+     to the whole content height (637px = 715 - 78 header) at any --plugin-width. ---------- */
+  .paradyneq .moth-content { padding: 0 2.46% 0; display: grid; grid-template-rows: 3fr 339fr 8fr 34fr 6fr 192fr 55fr; row-gap: 0; }
+  .paradyneq .moth-content > * { min-height: 0; min-width: 0; }
+
+  /* ---------- Spectrum panel ---------- */
+  .paradyn-spectrum { grid-row: 2; position: relative; border: 1px solid rgba(var(--accent-rgb), .5); border-radius: 6px; background: linear-gradient(180deg, rgba(6,10,14,.92), rgba(4,6,9,.96)); box-shadow: 0 0 0 1px rgba(var(--accent2-rgb), .18) inset, 0 0 24px rgba(var(--accent-rgb), .06); overflow: hidden; }
+  .paradyn-spectrum svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .paradyn-grid-line { stroke: rgba(147, 163, 185, .14); stroke-width: 1; }
+  .paradyn-zero-line { stroke: rgba(233, 236, 241, .5); stroke-width: 1; }
+  .paradyn-spectrum-trace { fill: none; stroke: #5b6672; stroke-width: 1.1; opacity: .85; }
+  .paradyn-response-curve { fill: none; stroke: #eef1f5; stroke-width: 1.6; filter: drop-shadow(0 0 4px rgba(238,241,245,.35)); }
+  .paradyn-axis-label { fill: #7b8390; font-family: "Rajdhani", sans-serif; font-size: 10.5px; }
+  .paradyn-axis-label.is-left { text-anchor: start; }
+  .paradyn-axis-label.is-right { text-anchor: end; }
+  .paradyn-axis-label.is-freq { text-anchor: middle; }
+  .paradyn-band-node { position: absolute; width: 13px; height: 13px; margin: -6.5px 0 0 -6.5px; border-radius: 50%; border: 1.6px solid #c9ced6; background: rgba(8,10,14,.7); cursor: grab; box-shadow: 0 0 6px rgba(0,0,0,.6); }
+  .paradyn-band-node.is-selected { border-color: var(--accent-hot); box-shadow: 0 0 10px rgba(var(--accent-rgb), .65); }
+  .paradyn-band-node.is-selected::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--accent-hot); }
+  .paradyn-band-node:active { cursor: grabbing; }
+
+  /* ---------- Band tabs ---------- */
+  .paradyn-band-tabs { grid-row: 4; display: flex; align-items: center; gap: 8px; }
+  .paradyn-add-band { width: 25px; height: 25px; padding: 0; display: grid; place-items: center; border: 1px solid #33393f; border-radius: 5px; background: rgba(3,4,7,.6); color: #9aa0aa; font-size: 15px; line-height: 1; cursor: pointer; }
+  .paradyn-add-band:hover { color: var(--accent-hot); border-color: var(--accent-hot); }
+
+  /* ---------- Band editor ---------- */
+  .paradyn-band-editor { grid-row: 6; border: 1px solid #262b32; border-radius: 8px; background: rgba(5,7,10,.55); box-shadow: inset 0 0 0 1px rgba(255,255,255,.02); display: grid; grid-template-columns: 43.6fr 4fr 52.4fr; padding: 16px 20px; }
+  .paradyn-editor-main { display: grid; grid-template-rows: auto 1fr; row-gap: 16px; }
+  .paradyn-type-row { display: flex; gap: 10px; }
+  .paradyn-type-row .moth-select { flex: 1 1 0; }
+  .paradyn-main-knobs { display: flex; justify-content: space-between; align-items: start; }
+  .paradyn-divider-v { justify-self: center; width: 1px; height: 100%; background: linear-gradient(180deg, transparent, rgba(188,198,214,.16), transparent); }
+  .paradyn-editor-dynamic { display: grid; grid-template-rows: auto 1fr; row-gap: 16px; }
+  .paradyn-dynamic-toggles { display: flex; align-items: center; gap: 28px; }
+  .paradyn-dynamic-toggles .paradyn-check input::after { border-radius: 50%; }
+  .paradyn-dynamic-knobs { display: flex; justify-content: space-between; align-items: start; transition: opacity .15s; }
+  .paradyn-dynamic-knobs[data-disabled="true"] { opacity: .3; filter: grayscale(.6); pointer-events: none; }
+
+  /* ---------- Knobs: procedural face + live value arc (reuses moth-ui.js's drag/--knob-angle
+     mechanics unmodified -- only the visual face is ParaDyn-specific, not the interaction). ---------- */
+  .paradyn-knob-stack { display: grid; justify-items: center; gap: 6px; }
+  .paradyn-knob-stack .moth-field { width: 84px; }
+  /* Shared SplitFire-knob.png (MothProduction-Shared-VST/UI/Components/Knobs/) is already a
+     circle centred and inscribed edge-to-edge in its own square canvas -- verified pixel-exact
+     (opaque to all four edge midpoints at the centre row/column, transparent only in the four
+     corner triangles) rather than assumed, per the reskin skill's own alpha-checking pitfall.
+     A plain circular clip on an exactly-square component reproduces that centring with no
+     custom crop math needed; moth-ui.css's existing `.moth-knob-face { transform: rotate(var(
+     --knob-angle)) }` rotates it correctly already, unmodified. */
+  .paradyn-knob { width: 64px; border-radius: 50%; overflow: hidden; }
+</style>
+</head>
+<body class="moth-preview">
+<main class="moth-plugin paradyneq">
+  <header class="moth-header">
+    <div class="paradyn-left-brand">
+      <div class="moth-maker">Moth Production</div>
+      <h1 class="paradyn-title">Para Dyn <span>EQ</span></h1>
+    </div>
+    <img class="moth-logo" src="../../MothProduction-Shared-VST/UI/Logo/moth_logo.png" alt="Moth Production">
+    <div class="paradyn-header-controls">
+      <label class="paradyn-check"><input type="checkbox" id="bypassCheck"><span>Bypass</span></label>
+      <div class="paradyn-inline-group">
+        <span class="moth-control-label">Range</span>
+        <span class="moth-select-wrap"><select class="moth-select" id="rangeSelect">
+          <option>±3 dB</option><option>±6 dB</option><option>±12 dB</option>
+          <option selected>±24 dB</option><option>±48 dB</option>
+        </select></span>
+      </div>
+      <div class="paradyn-inline-group">
+        <span class="moth-control-label">Oversampling</span>
+        <span class="moth-select-wrap"><select class="moth-select" id="oversamplingSelect">
+          <option selected>Off</option><option>2x</option><option>4x</option><option>8x</option>
+        </select></span>
+      </div>
+      <div class="paradyn-header-knob">
+        <div class="moth-knob paradyn-header-knob-face">
+          <img class="moth-knob-face" src="../../MothProduction-Shared-VST/UI/Components/Knobs/SplitFire-knob.png" alt="">
+          <input type="range" min="-24" max="24" step="0.1" value="0" data-readout="outputReadout" data-unit=" dB" data-signed="true" data-decimals="2" data-default="0" aria-label="Output gain">
+        </div>
+        <div class="paradyn-header-knob-text">
+          <span class="moth-control-label">Output</span>
+          <output id="outputReadout" class="moth-readout">-0.00 dB</output>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <section class="moth-content">
+    <div class="paradyn-spectrum" id="spectrumPanel">
+      <svg id="spectrumSvg" viewBox="0 0 1180 339" preserveAspectRatio="none"></svg>
+      <!-- band-node divs injected here by JS, positioned in % so they track the SVG exactly -->
+    </div>
+
+    <div class="paradyn-band-tabs moth-tabs" id="bandTabs" data-tabs></div>
+
+    <div class="paradyn-band-editor">
+      <div class="paradyn-editor-main">
+        <div class="paradyn-type-row">
+          <span class="moth-select-wrap"><select class="moth-select" id="filterTypeSelect">
+            <option>Bell</option><option>Low Shelf</option><option>High Shelf</option>
+            <option>High Pass</option><option>Low Pass</option>
+          </select></span>
+          <span class="moth-select-wrap"><select class="moth-select" id="channelModeSelect">
+            <option>Stereo</option><option>Mid</option><option>Side</option><option>Left</option><option>Right</option>
+          </select></span>
+        </div>
+        <div class="paradyn-main-knobs">
+          <div class="paradyn-knob-stack">
+            <span class="moth-control-label">Freq</span>
+            <div class="moth-knob paradyn-knob" id="freqKnob">
+              <img class="moth-knob-face" src="../../MothProduction-Shared-VST/UI/Components/Knobs/SplitFire-knob.png" alt="">
+              <input type="range" min="0" max="1000" step="0.1" value="0" aria-label="Frequency">
+            </div>
+            <output class="moth-field" id="freqReadout">1000.0 Hz</output>
+          </div>
+          <div class="paradyn-knob-stack">
+            <span class="moth-control-label">Gain</span>
+            <div class="moth-knob paradyn-knob">
+              <img class="moth-knob-face" src="../../MothProduction-Shared-VST/UI/Components/Knobs/SplitFire-knob.png" alt="">
+              <input type="range" min="-24" max="24" step="0.01" value="0" data-readout="gainReadout" data-unit=" dB" data-signed="true" data-decimals="2" data-default="0" aria-label="Gain">
+            </div>
+            <output class="moth-field" id="gainReadout">0.00 dB</output>
+          </div>
+          <div class="paradyn-knob-stack">
+            <span class="moth-control-label">Q</span>
+            <div class="moth-knob paradyn-knob">
+              <img class="moth-knob-face" src="../../MothProduction-Shared-VST/UI/Components/Knobs/SplitFire-knob.png" alt="">
+              <input type="range" min="0.1" max="18" step="0.001" value="0.707" data-readout="qReadout" data-decimals="3" data-default="0.707" aria-label="Q">
+            </div>
+            <output class="moth-field" id="qReadout">0.707</output>
+          </div>
+        </div>
+      </div>
+
+      <div class="paradyn-divider-v"></div>
+
+      <div class="paradyn-editor-dynamic">
+        <div class="paradyn-dynamic-toggles">
+          <label class="paradyn-check"><input type="checkbox" id="dynamicCheck"><span>Dynamic</span></label>
+          <label class="paradyn-check"><input type="checkbox" id="soloCheck"><span>Solo</span></label>
+          <label class="paradyn-check"><input type="checkbox" id="muteCheck"><span>Mute</span></label>
+        </div>
+        <div class="paradyn-dynamic-knobs" id="dynamicKnobs" data-disabled="true">
+          <div class="paradyn-knob-stack">
+            <span class="moth-control-label">Threshold</span>
+            <div class="moth-knob paradyn-knob">
+              <img class="moth-knob-face" src="../../MothProduction-Shared-VST/UI/Components/Knobs/SplitFire-knob.png" alt="">
+              <input type="range" min="-60" max="0" step="0.01" value="-24" data-readout="thresholdReadout" data-unit=" dB" data-decimals="2" data-default="-24" aria-label="Threshold">
+            </div>
+            <output class="moth-field" id="thresholdReadout">-24.00 dB</output>
+          </div>
+          <div class="paradyn-knob-stack">
+            <span class="moth-control-label">Ratio</span>
+            <div class="moth-knob paradyn-knob">
+              <img class="moth-knob-face" src="../../MothProduction-Shared-VST/UI/Components/Knobs/SplitFire-knob.png" alt="">
+              <input type="range" min="1" max="20" step="0.01" value="2" data-readout="ratioReadout" data-decimals="2" data-default="2" aria-label="Ratio">
+            </div>
+            <output class="moth-field" id="ratioReadout">2.00 : 1</output>
+          </div>
+          <div class="paradyn-knob-stack">
+            <span class="moth-control-label">Attack</span>
+            <div class="moth-knob paradyn-knob">
+              <img class="moth-knob-face" src="../../MothProduction-Shared-VST/UI/Components/Knobs/SplitFire-knob.png" alt="">
+              <input type="range" min="0.1" max="200" step="0.01" value="15" data-readout="attackReadout" data-unit=" ms" data-decimals="2" data-default="15" aria-label="Attack">
+            </div>
+            <output class="moth-field" id="attackReadout">15.00 ms</output>
+          </div>
+          <div class="paradyn-knob-stack">
+            <span class="moth-control-label">Release</span>
+            <div class="moth-knob paradyn-knob">
+              <img class="moth-knob-face" src="../../MothProduction-Shared-VST/UI/Components/Knobs/SplitFire-knob.png" alt="">
+              <input type="range" min="5" max="2000" step="0.1" value="150" data-readout="releaseReadout" data-unit=" ms" data-decimals="1" data-default="150" aria-label="Release">
+            </div>
+            <output class="moth-field" id="releaseReadout">150.0 ms</output>
+          </div>
+          <div class="paradyn-knob-stack">
+            <span class="moth-control-label">Knee</span>
+            <div class="moth-knob paradyn-knob">
+              <img class="moth-knob-face" src="../../MothProduction-Shared-VST/UI/Components/Knobs/SplitFire-knob.png" alt="">
+              <input type="range" min="0" max="24" step="0.01" value="6" data-readout="kneeReadout" data-unit=" dB" data-decimals="2" data-default="6" aria-label="Knee">
+            </div>
+            <output class="moth-field" id="kneeReadout">6.00 dB</output>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+<script src="../../MothProduction-Shared-VST/UI/Mockup/moth-ui.js"></script>
+<script src="paradyneq-ui.js"></script>
+</body>
+</html>
