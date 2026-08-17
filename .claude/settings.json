@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/mothproduction/Documents/VSCode/DeathWings-VST/Source/DSP/**)"
+    ]
+  }
+}
