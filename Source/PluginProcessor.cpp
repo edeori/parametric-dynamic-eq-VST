@@ -1,6 +1,9 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include <cmath>
+#if PARADYNEQ_ENABLE_LICENSING
+#include "BinaryData.h"
+#endif
 
 namespace
 {
@@ -42,6 +45,28 @@ ParaDynAudioProcessor::ParaDynAudioProcessor()
         soloParams[(size_t) i] = apvts.getRawParameterValue (ParamIDs::solo (i));
         muteParams[(size_t) i] = apvts.getRawParameterValue (ParamIDs::mute (i));
     }
+
+#if PARADYNEQ_ENABLE_LICENSING
+    // Runs during plugin construction (main/message thread), never on the audio thread - any
+    // network/disk work licenseManager needs is either done right here (once, at startup) or
+    // handed to its own background thread pool; processBlock() only ever reads an atomic flag.
+    juce::String configError;
+    const auto configJson = juce::String::fromUTF8 (BinaryData::licensing_config_json,
+                                                      BinaryData::licensing_config_jsonSize);
+    auto licenseConfig = licensing::LicenseConfig::fromJsonString (configJson, configError);
+
+    if (licenseConfig.isValid())
+        licensing::LicenseConfig::applyPreprocessorOverrides (licenseConfig);
+    else
+    {
+        auto fallback = licensing::LicenseConfig::fromPreprocessorDefinitions (configError);
+        if (fallback.isValid())
+            licenseConfig = fallback;
+    }
+
+    if (! licenseManager.initialise (licenseConfig, configError))
+        DBG ("Licensing initialisation failed: " + configError);
+#endif
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout ParaDynAudioProcessor::createParameterLayout()
@@ -237,6 +262,18 @@ EQBand::Params ParaDynAudioProcessor::getBandParams (int slot) const noexcept
 void ParaDynAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     juce::ScopedNoDenormals noDenormals;
+
+#if PARADYNEQ_ENABLE_LICENSING
+    // isAudioEnabled() is a plain atomic load - safe here. If the trial has expired and no valid
+    // license is active, silence output rather than running any DSP below - checked first, ahead
+    // of even the user's own Bypass toggle, so there's no bypass-shaped loophole.
+    if (! licenseManager.isAudioEnabled())
+    {
+        buffer.clear();
+        return;
+    }
+#endif
+
     auto mainBuffer = getBusBuffer (buffer, true, 0);
     const auto samples = mainBuffer.getNumSamples();
 

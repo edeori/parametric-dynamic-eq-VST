@@ -11,11 +11,20 @@
 #include "Parameters.h"
 #include "SpectrumFifo.h"
 
+#if PARADYNEQ_ENABLE_LICENSING
+#include "Licensing/LicenseManager.h"
+#endif
+
 class ParaDynAudioProcessor final : public juce::AudioProcessor
 {
 public:
     ParaDynAudioProcessor();
     ~ParaDynAudioProcessor() override = default;
+
+#if PARADYNEQ_ENABLE_LICENSING
+    licensing::LicenseManager& getLicenseManager() noexcept { return licenseManager; }
+    const licensing::LicenseManager& getLicenseManager() const noexcept { return licenseManager; }
+#endif
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
@@ -87,6 +96,10 @@ private:
     std::atomic<float>* outputParam = nullptr;
     std::atomic<float>* oversamplingParam = nullptr;
     std::atomic<int> selectedBand { -1 };
+
+#if PARADYNEQ_ENABLE_LICENSING
+    licensing::LicenseManager licenseManager;
+#endif
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ParaDynAudioProcessor)
 };

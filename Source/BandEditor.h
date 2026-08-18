@@ -39,7 +39,7 @@ private:
     juce::Slider thresholdSlider, ratioSlider, attackSlider, releaseSlider, kneeSlider;
     juce::Label thresholdLabel, ratioLabel, attackLabel, releaseLabel, kneeLabel;
     juce::ToggleButton soloButton { "Solo" }, muteButton { "Mute" };
-    juce::TextButton removeButton { "Remove band" };
+    juce::TextButton removeButton { "Remove" };
     juce::TextButton addButton { "Add band" };
 
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;

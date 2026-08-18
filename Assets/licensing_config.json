@@ -1,0 +1,18 @@
+{
+  "companyName": "Moth Production",
+  "applicationName": "ParaDyn EQ",
+  "productId": "paradyn-eq",
+  "productVersion": "0.1.0",
+  "serverBaseUrl": "https://licensing.mothproduction.hu",
+  "publicKey": "10001,b5f3cb164fc2113f8348eabfa3f3beb95bd39a49ffca86868c0435814f681d80a03706cda2a996033a3740c3b1633354e101a36e9aa226bcb2f8b0e27f552a5814f644d811b9eafc4a87c49b3490f8e28e862da501c240c83aef342c326c000ecc114728498899172eba006ccb1351bb7ee781a8880d0e7696e5e96a8b33496043b881b74aefb21bedccd54ba63adf8eb8e3d57c2692933e449614ab24ed98a0e9e925857d931835ccf08964cb0844c8c6c952fb447fb491527f2bf3e59857b65d00a388a3a10bc12d13e14255f69aaaaf82a0a5bc3970750b5567670c70594f99d2006fc1f8e746e1a77848c1270dca5d5bf57df47e3e1b7c71930c606de435",
+  "trialLengthDays": 15,
+  "offlineGracePeriodDays": 14,
+  "requestTimeoutMs": 5000,
+  "allowUnsignedDevelopmentLicenses": false,
+  "endpoints": {
+    "activate": "/activate",
+    "validate": "/validate",
+    "refresh": "/refresh",
+    "deactivate": "/deactivate"
+  }
+}

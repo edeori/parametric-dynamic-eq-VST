@@ -1,6 +1,8 @@
 #include "BandEditor.h"
 #include "PluginProcessor.h"
 #include "Parameters.h"
+#include "ParaDynFonts.h"
+#include "ParaDynLookAndFeel.h"
 
 namespace
 {
@@ -10,14 +12,16 @@ namespace
         slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 64, 16);
         label.setText (text, juce::dontSendNotification);
         label.setJustificationType (juce::Justification::centred);
-        label.setFont (juce::Font (juce::FontOptions (11.0f)));
+        label.setFont (ParaDynFonts::uiLight (11.0f));
+        label.setColour (juce::Label::textColourId, ParaDynLookAndFeel::textDim);
     }
 }
 
 BandEditor::BandEditor (ParaDynAudioProcessor& owner) : processor (owner)
 {
     titleLabel.setJustificationType (juce::Justification::centredLeft);
-    titleLabel.setFont (juce::Font (juce::FontOptions (15.0f).withStyle ("Bold")));
+    titleLabel.setFont (ParaDynFonts::uiMedium (13.0f));
+    titleLabel.setColour (juce::Label::textColourId, ParaDynLookAndFeel::textPrimary);
     addAndMakeVisible (titleLabel);
 
     filterTypeBox.addItemList (filterTypeNames(), 1);
@@ -103,7 +107,7 @@ void BandEditor::rebuildForSelectedBand (int slot)
     releaseAttachment.reset(); kneeAttachment.reset();
 
     const auto hasBand = slot >= 0;
-    for (auto* c : { (juce::Component*) &filterTypeBox, (juce::Component*) &channelModeBox,
+    for (auto* c : { (juce::Component*) &titleLabel, (juce::Component*) &filterTypeBox, (juce::Component*) &channelModeBox,
                      (juce::Component*) &frequencySlider, (juce::Component*) &gainSlider, (juce::Component*) &qSlider,
                      (juce::Component*) &dynamicToggle, (juce::Component*) &soloButton, (juce::Component*) &muteButton,
                      (juce::Component*) &removeButton })
@@ -114,7 +118,7 @@ void BandEditor::rebuildForSelectedBand (int slot)
 
     if (! hasBand)
     {
-        titleLabel.setText ("No band selected", juce::dontSendNotification);
+        titleLabel.setText ({}, juce::dontSendNotification);
         return;
     }
 
@@ -137,66 +141,97 @@ void BandEditor::rebuildForSelectedBand (int slot)
     resized();
 }
 
+namespace
+{
+    // One "knob stack": small label above, rotary knob, its own text-box readout below --
+    // matches Mockup/paradyneq-ui.html's .paradyn-knob-stack. Slider's own TextBoxBelow
+    // serves as the readout, so this just places label+knob (the text box is included in
+    // the slider's own bounds via setTextBoxStyle in styleRotarySlider above).
+    void layoutKnobStack (juce::Rectangle<int> column, juce::Slider& slider, juce::Label& label)
+    {
+        label.setBounds (column.removeFromTop (14));
+        slider.setBounds (column);
+    }
+
+    void layoutKnobRow (juce::Rectangle<int> row, std::initializer_list<std::pair<juce::Slider*, juce::Label*>> knobs)
+    {
+        const auto n = (int) knobs.size();
+        if (n == 0) return;
+        const auto colWidth = row.getWidth() / n;
+        int x = row.getX();
+        for (auto& pair : knobs)
+        {
+            layoutKnobStack ({ x, row.getY(), colWidth, row.getHeight() }, *pair.first, *pair.second);
+            x += colWidth;
+        }
+    }
+}
+
 void BandEditor::resized()
 {
-    auto bounds = getLocalBounds().reduced (8);
-    titleLabel.setBounds (bounds.removeFromTop (22));
+    // Two-column layout ported from Mockup/paradyneq-ui.html's .paradyn-band-editor
+    // (43.6fr main / 4fr divider / 52.4fr dynamic, see Mockup/PORTING.md) -- replaces
+    // the previous full-width-stacked-rows layout, which needed ~270px of vertical
+    // space and no longer fits the mockup's 192px-tall band-editor row.
+    auto bounds = getLocalBounds().reduced (14, 10);
 
     if (shownSlot < 0)
     {
-        addButton.setBounds (bounds.removeFromTop (28).withSizeKeepingCentre (120, 26));
+        addButton.setBounds (bounds.withSizeKeepingCentre (120, 26));
         return;
     }
 
-    auto topRow = bounds.removeFromTop (26);
+    auto titleRow = bounds.removeFromTop (18);
+    titleLabel.setBounds (titleRow.removeFromLeft (100));
+    removeButton.setBounds (titleRow.removeFromRight (60));
+    bounds.removeFromTop (4);
+
+    const auto dividerX = bounds.getX() + juce::roundToInt (bounds.getWidth() * (43.6f / 100.0f));
+    auto mainColumn = bounds.withWidth (dividerX - bounds.getX() - 6);
+    auto dynamicColumn = bounds.withX (dividerX + 6).withWidth (bounds.getRight() - dividerX - 6);
+
+    auto typeRow = mainColumn.removeFromTop (24);
     if (slopeControlShown)
     {
-        filterTypeBox.setBounds (topRow.removeFromLeft (topRow.getWidth() / 3).reduced (2, 0));
-        slopeBox.setBounds (topRow.removeFromLeft (topRow.getWidth() / 2).reduced (2, 0));
-        channelModeBox.setBounds (topRow.reduced (2, 0));
+        filterTypeBox.setBounds (typeRow.removeFromLeft (typeRow.getWidth() / 3).reduced (2, 0));
+        slopeBox.setBounds (typeRow.removeFromLeft (typeRow.getWidth() / 2).reduced (2, 0));
+        channelModeBox.setBounds (typeRow.reduced (2, 0));
     }
     else
     {
-        filterTypeBox.setBounds (topRow.removeFromLeft (topRow.getWidth() / 2).reduced (2, 0));
-        channelModeBox.setBounds (topRow.reduced (2, 0));
+        filterTypeBox.setBounds (typeRow.removeFromLeft (typeRow.getWidth() / 2).reduced (2, 0));
+        channelModeBox.setBounds (typeRow.reduced (2, 0));
     }
+    mainColumn.removeFromTop (10);
+    layoutKnobRow (mainColumn, { { &frequencySlider, &frequencyLabel }, { &gainSlider, &gainLabel }, { &qSlider, &qLabel } });
 
-    auto mainKnobs = bounds.removeFromTop (86);
-    const auto knobWidth = mainKnobs.getWidth() / 3;
-    for (auto pair : { std::pair<juce::Slider*, juce::Label*> { &frequencySlider, &frequencyLabel },
-                       std::pair<juce::Slider*, juce::Label*> { &gainSlider, &gainLabel },
-                       std::pair<juce::Slider*, juce::Label*> { &qSlider, &qLabel } })
-    {
-        auto column = mainKnobs.removeFromLeft (knobWidth);
-        pair.second->setBounds (column.removeFromTop (14));
-        pair.first->setBounds (column);
-    }
-
-    auto toggleRow = bounds.removeFromTop (26);
-    dynamicToggle.setBounds (toggleRow.removeFromLeft (toggleRow.getWidth() / 3));
-    soloButton.setBounds (toggleRow.removeFromLeft (toggleRow.getWidth() / 2));
+    auto toggleRow = dynamicColumn.removeFromTop (24);
+    const auto toggleWidth = toggleRow.getWidth() / 3;
+    dynamicToggle.setBounds (toggleRow.removeFromLeft (toggleWidth));
+    soloButton.setBounds (toggleRow.removeFromLeft (toggleWidth));
     muteButton.setBounds (toggleRow);
-
-    auto dynamicKnobs = bounds.removeFromTop (86);
-    const auto dynamicKnobWidth = dynamicKnobs.getWidth() / 5;
-    for (auto pair : { std::pair<juce::Slider*, juce::Label*> { &thresholdSlider, &thresholdLabel },
-                       std::pair<juce::Slider*, juce::Label*> { &ratioSlider, &ratioLabel },
-                       std::pair<juce::Slider*, juce::Label*> { &attackSlider, &attackLabel },
-                       std::pair<juce::Slider*, juce::Label*> { &releaseSlider, &releaseLabel },
-                       std::pair<juce::Slider*, juce::Label*> { &kneeSlider, &kneeLabel } })
-    {
-        auto column = dynamicKnobs.removeFromLeft (dynamicKnobWidth);
-        pair.second->setBounds (column.removeFromTop (14));
-        pair.first->setBounds (column);
-    }
-
-    removeButton.setBounds (bounds.removeFromTop (26).withSizeKeepingCentre (120, 24));
+    dynamicColumn.removeFromTop (10);
+    layoutKnobRow (dynamicColumn, { { &thresholdSlider, &thresholdLabel }, { &ratioSlider, &ratioLabel },
+                                     { &attackSlider, &attackLabel }, { &releaseSlider, &releaseLabel },
+                                     { &kneeSlider, &kneeLabel } });
 }
 
 void BandEditor::paint (juce::Graphics& g)
 {
-    g.setColour (juce::Colour (0xff0e1013));
-    g.fillRoundedRectangle (getLocalBounds().toFloat(), 6.0f);
-    g.setColour (juce::Colour (0xff2a2e33));
-    g.drawRoundedRectangle (getLocalBounds().toFloat().reduced (0.5f), 6.0f, 1.0f);
+    auto bounds = getLocalBounds().toFloat();
+    g.setColour (juce::Colour (0x8c05070a));
+    g.fillRoundedRectangle (bounds, 8.0f);
+    g.setColour (juce::Colour (0xff262b32));
+    g.drawRoundedRectangle (bounds.reduced (0.5f), 8.0f, 1.0f);
+
+    if (shownSlot >= 0)
+    {
+        const auto dividerX = getLocalBounds().reduced (14, 10).getX()
+            + juce::roundToInt (getLocalBounds().reduced (14, 10).getWidth() * (43.6f / 100.0f));
+        juce::ColourGradient grad (juce::Colours::transparentBlack, (float) dividerX, bounds.getY(),
+                                    juce::Colours::transparentBlack, (float) dividerX, bounds.getBottom(), false);
+        grad.addColour (0.5, juce::Colour (0x29bcc6d6));
+        g.setGradientFill (grad);
+        g.fillRect (juce::Rectangle<float> ((float) dividerX + 2.0f, bounds.getY() + 8.0f, 1.0f, bounds.getHeight() - 16.0f));
+    }
 }

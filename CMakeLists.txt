@@ -5,6 +5,11 @@ project(ParaDynEQ VERSION 0.1.0)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+option(PARADYNEQ_ENABLE_LICENSING "Build ParaDyn EQ with the reusable licensing module enabled" ON)
+set(PARADYNEQ_LICENSE_SERVER_BASE_URL "" CACHE STRING "Optional build-time override for the licensing server base URL")
+set(PARADYNEQ_LICENSE_PRODUCT_ID "" CACHE STRING "Optional build-time override for the licensing product ID")
+set(PARADYNEQ_LICENSE_PUBLIC_KEY "" CACHE STRING "Optional build-time override for the licensing public key")
+
 if(APPLE)
     set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "Build architectures for macOS" FORCE)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "Minimum macOS target" FORCE)
@@ -18,6 +23,22 @@ FetchContent_Declare(
     GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(JUCE)
+
+set(PARADYNEQ_ASSETS
+    Assets/background.png
+    Assets/knob.png
+    Assets/moth_logo.png
+    Assets/Fonts/Oxanium-Bold.ttf
+    Assets/Fonts/BarlowCondensed-Light.ttf
+    Assets/Fonts/BarlowCondensed-Medium.ttf
+    Assets/Fonts/Rajdhani-Medium.ttf
+)
+
+if (PARADYNEQ_ENABLE_LICENSING)
+    list(APPEND PARADYNEQ_ASSETS Assets/licensing_config.json)
+endif()
+
+juce_add_binary_data(ParaDynEQAssets SOURCES ${PARADYNEQ_ASSETS})
 
 juce_add_plugin(ParaDynEQ
     COMPANY_NAME "Moth Production"
@@ -36,6 +57,12 @@ juce_add_plugin(ParaDynEQ
     AU_MAIN_TYPE kAudioUnitType_Effect
 )
 
+if (APPLE AND PARADYNEQ_ENABLE_LICENSING)
+    set_target_properties(ParaDynEQ PROPERTIES
+        JUCE_PLIST_TO_MERGE
+            "<key>NSAppTransportSecurity</key><dict><key>NSAllowsArbitraryLoads</key><true/></dict>")
+endif()
+
 # Lay artefacts out as build/<FORMAT>/... instead of the JUCE default of
 # build/ParaDynEQ_artefacts/<CONFIG>/<FORMAT>/..., so each format's build result
 # lands directly under a top-level Standalone/VST3/AU folder.
@@ -45,7 +72,7 @@ set_target_properties(ParaDynEQ PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
 
-target_sources(ParaDynEQ PRIVATE
+set(PARADYNEQ_SOURCES
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
     Source/EQBand.cpp
@@ -53,21 +80,55 @@ target_sources(ParaDynEQ PRIVATE
     Source/Oversampler.cpp
     Source/SpectrumAnalyzer.cpp
     Source/BandEditor.cpp
+    Source/ParaDynFonts.cpp
+    Source/ParaDynLookAndFeel.cpp
 )
+
+if (PARADYNEQ_ENABLE_LICENSING)
+    list(APPEND PARADYNEQ_SOURCES
+        Source/Licensing/LicenseConfig.cpp
+        Source/Licensing/LicenseClient.cpp
+        Source/Licensing/LicenseManager.cpp
+        Source/Licensing/LicenseStore.cpp
+        Source/Licensing/MachineFingerprint.cpp
+        Source/Licensing/TrialManager.cpp)
+endif()
+
+target_sources(ParaDynEQ PRIVATE ${PARADYNEQ_SOURCES})
 
 target_compile_definitions(ParaDynEQ PUBLIC
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0
+    PARADYNEQ_ENABLE_LICENSING=$<BOOL:${PARADYNEQ_ENABLE_LICENSING}>
 )
 
+if (PARADYNEQ_ENABLE_LICENSING)
+    if (NOT PARADYNEQ_LICENSE_SERVER_BASE_URL STREQUAL "")
+        target_compile_definitions(ParaDynEQ PUBLIC LICENSE_SERVER_BASE_URL="${PARADYNEQ_LICENSE_SERVER_BASE_URL}")
+    endif()
+    if (NOT PARADYNEQ_LICENSE_PRODUCT_ID STREQUAL "")
+        target_compile_definitions(ParaDynEQ PUBLIC LICENSE_PRODUCT_ID="${PARADYNEQ_LICENSE_PRODUCT_ID}")
+    endif()
+    if (NOT PARADYNEQ_LICENSE_PUBLIC_KEY STREQUAL "")
+        target_compile_definitions(ParaDynEQ PUBLIC LICENSE_PUBLIC_KEY="${PARADYNEQ_LICENSE_PUBLIC_KEY}")
+    endif()
+endif()
+
 target_link_libraries(ParaDynEQ
-    PRIVATE juce::juce_audio_utils juce::juce_dsp
+    PRIVATE juce::juce_audio_utils juce::juce_dsp ParaDynEQAssets
     PUBLIC juce::juce_recommended_config_flags
            juce::juce_recommended_lto_flags
            juce::juce_recommended_warning_flags
 )
+
+if (PARADYNEQ_ENABLE_LICENSING)
+    target_link_libraries(ParaDynEQ PRIVATE juce::juce_cryptography)
+    if (APPLE)
+        target_link_libraries(ParaDynEQ PRIVATE "-framework IOKit")
+    endif()
+endif()
 
 option(PARADYNEQ_BUILD_TESTS "Build DSP unit tests" ON)
 if(PARADYNEQ_BUILD_TESTS)
