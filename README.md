@@ -51,9 +51,8 @@ CMake opció vezérli (alapértelmezett `ON`).
   felülete továbbra is normálisan megnyílik - csak a hang némul el
   (`processBlock()` törli a puffert és korán visszatér, még a felhasználó
   saját Bypass gombja előtt is, hogy ne legyen "bypass-alakú kiskapu"). Nincs
-  külön "zárolt" UI-mód.
-- **Új fájlok**: `Source/Licensing/` (12 fájl, app-agnosztikus - változatlan
-  a megosztott modulhoz képest), `Assets/licensing_config.json`.
+  külön DSP-mód; az aktiválási felület mutatja a licenc állapotát.
+- **Új fájlok**: `Source/Licensing/` (megosztott alapú modul, javított stabil gépazonosítással), `Assets/licensing_config.json`.
 - **Konfig-példa** (a valós értékek az `Assets/licensing_config.json`-ban
   vannak, megosztva az egész terméksorral - ne commitolj plug-inenként
   eltérő kulcsot/URL-t):
