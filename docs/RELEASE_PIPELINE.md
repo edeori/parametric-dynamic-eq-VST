@@ -58,3 +58,11 @@ Downloaded Windows ProductVersion, Mac package version and all three Mac bundle
 versions were checked as 0.1.2.
 [Publish verification 39305375515](https://github.com/edeori/parametric-dynamic-eq-VST/actions/runs/39305375515)
 validated the reserved commit/version and both installers; live upload was skipped.
+
+## Live versioned release — 2026-10-19
+
+Version **0.1.2**, built source `35235e3ade46bc4d1050a6296d3bcc385c1eda0a`.
+[Build](https://github.com/edeori/parametric-dynamic-eq-VST/actions/runs/39305139718) and [publication](https://github.com/edeori/parametric-dynamic-eq-VST/actions/runs/39309411818) succeeded for macOS and Windows.
+The published Mac package version and Windows ProductVersion were verified; the
+live EXE SHA-256 matches the clean Defender report. Shop version updated after
+publication. See the [shared release record](https://github.com/edeori/vst-release-pipeline/blob/main/docs/releases/2026-10-19-version-rollout.md) for all products and hashes.
