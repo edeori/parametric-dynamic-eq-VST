@@ -127,6 +127,7 @@ bool ParaDynAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) 
 
 void ParaDynAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    matchEQ.prepare (sampleRate);
     const auto channels = juce::jmax (1, getMainBusNumOutputChannels());
     oversampler.prepare (sampleRate, samplesPerBlock, channels);
     oversampler.setOversamplingFactor (juce::roundToInt (oversamplingParam->load()));
@@ -276,6 +277,7 @@ void ParaDynAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
 
     auto mainBuffer = getBusBuffer (buffer, true, 0);
     const auto samples = mainBuffer.getNumSamples();
+    matchEQ.push (mainBuffer);
 
     const auto factorChoice = juce::roundToInt (oversamplingParam->load());
     const auto previousMultiplier = oversampler.getFactorMultiplier();
@@ -343,16 +345,101 @@ juce::AudioProcessorParameter* ParaDynAudioProcessor::getBypassParameter() const
 void ParaDynAudioProcessor::getStateInformation (juce::MemoryBlock& destination)
 {
     if (auto xml = apvts.copyState().createXml())
+    {
+        // Keep learned profiles out of APVTS parameter automation, but include
+        // them in DAW project saves and copied/moved plugin instances.
+        while (auto* old = xml->getChildByName ("MatchEQ")) xml->removeChildElement (old, true);
+        xml->addChildElement (new juce::XmlElement (matchEQ.saveState()));
         copyXmlToBinary (*xml, destination);
+    }
 }
 
 void ParaDynAudioProcessor::setStateInformation (const void* data, int size)
 {
     if (auto xml = getXmlFromBinary (data, size))
         if (xml->hasTagName (apvts.state.getType()))
+        {
+            const juce::ScopedLock lock (matchUndoLock);
+            matchUndo.clear();
+            matchEQ.restoreState (xml->getChildByName ("MatchEQ"));
+            if (auto* child = xml->getChildByName ("MatchEQ")) xml->removeChildElement (child, true);
             apvts.replaceState (juce::ValueTree::fromXml (*xml));
+        }
     const auto slots = getActiveBandSlots();
     setSelectedBand (slots.empty() ? -1 : slots.front());
+}
+
+void ParaDynAudioProcessor::setMatchParameter (const juce::String& id, float value)
+{
+    if (auto* parameter = apvts.getParameter (id))
+    {
+        parameter->beginChangeGesture();
+        parameter->setValueNotifyingHost (parameter->convertTo0to1 (value));
+        parameter->endChangeGesture();
+    }
+}
+
+juce::Result ParaDynAudioProcessor::applyMatchEQ()
+{
+    const auto multiplier = 1 << juce::jlimit (0, 3, juce::roundToInt (oversamplingParam->load()));
+    const auto fit = matchEQ.fit (getSampleRate() * multiplier);
+    if (fit.error.isNotEmpty()) return juce::Result::fail (fit.error);
+    const juce::ScopedLock lock (matchUndoLock);
+    matchUndo.clear();
+    // Snapshot only parameters that Match changes. Output gain and unrelated
+    // controls remain independently editable before an Undo Match.
+    for (int slot = 0; slot < ParaDynConstants::maxBands; ++slot)
+        for (const auto& id : { ParamIDs::active (slot), ParamIDs::frequency (slot), ParamIDs::gain (slot),
+                               ParamIDs::q (slot), ParamIDs::filterType (slot), ParamIDs::filterSlope (slot),
+                               ParamIDs::channelMode (slot), ParamIDs::dynamicEnabled (slot),
+                               ParamIDs::solo (slot), ParamIDs::mute (slot) })
+            matchUndo.emplace_back (id, apvts.getRawParameterValue (id)->load());
+
+    for (int slot = 0; slot < ParaDynConstants::maxBands; ++slot)
+    {
+        setMatchParameter (ParamIDs::active (slot), 0.0f);
+        setMatchParameter (ParamIDs::solo (slot), 0.0f);
+    }
+    for (size_t i = 0; i < fit.bands.size(); ++i)
+    {
+        const int slot = (int) i;
+        const auto& band = fit.bands[i];
+        setMatchParameter (ParamIDs::frequency (slot), band.frequencyHz);
+        setMatchParameter (ParamIDs::gain (slot), band.gainDb);
+        setMatchParameter (ParamIDs::q (slot), band.q);
+        setMatchParameter (ParamIDs::filterType (slot), (float) FilterType::Bell);
+        setMatchParameter (ParamIDs::filterSlope (slot), (float) FilterSlope::Slope12);
+        setMatchParameter (ParamIDs::channelMode (slot), (float) ChannelMode::Stereo);
+        setMatchParameter (ParamIDs::dynamicEnabled (slot), 0.0f);
+        setMatchParameter (ParamIDs::mute (slot), 0.0f);
+        setMatchParameter (ParamIDs::active (slot), 1.0f);
+    }
+    setSelectedBand (fit.bands.empty() ? -1 : 0);
+    updateHostDisplay (ChangeDetails().withNonParameterStateChanged (true));
+    return juce::Result::ok();
+}
+
+bool ParaDynAudioProcessor::canUndoMatchEQ() const
+{
+    const juce::ScopedLock lock (matchUndoLock);
+    return ! matchUndo.empty();
+}
+
+bool ParaDynAudioProcessor::undoMatchEQ()
+{
+    const juce::ScopedLock lock (matchUndoLock);
+    if (matchUndo.empty()) return false;
+    for (int slot = 0; slot < ParaDynConstants::maxBands; ++slot)
+        setMatchParameter (ParamIDs::active (slot), 0.0f);
+    // Restore activation last, after all other parameter values are in place.
+    for (const auto& entry : matchUndo)
+        if (! entry.first.startsWith ("active")) setMatchParameter (entry.first, entry.second);
+    for (const auto& entry : matchUndo)
+        if (entry.first.startsWith ("active")) setMatchParameter (entry.first, entry.second);
+    matchUndo.clear();
+    const auto slots = getActiveBandSlots();
+    setSelectedBand (slots.empty() ? -1 : slots.front());
+    return true;
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

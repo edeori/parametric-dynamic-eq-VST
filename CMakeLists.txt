@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(ParaDynEQ VERSION 0.1.0)
+project(ParaDynEQ VERSION 0.1.1)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -72,6 +72,14 @@ set_target_properties(ParaDynEQ PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
 
+# Explicit configuration directory keeps Windows installer inputs deterministic.
+if(WIN32)
+    set_target_properties(ParaDynEQ PROPERTIES
+        ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIG>"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIG>"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIG>")
+endif()
+
 set(PARADYNEQ_SOURCES
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
@@ -79,6 +87,8 @@ set(PARADYNEQ_SOURCES
     Source/DynamicDetector.cpp
     Source/Oversampler.cpp
     Source/SpectrumAnalyzer.cpp
+    Source/MatchEQ.cpp
+    Source/MatchEQPanel.cpp
     Source/BandEditor.cpp
     Source/ParaDynFonts.cpp
     Source/ParaDynLookAndFeel.cpp
@@ -124,6 +134,7 @@ target_link_libraries(ParaDynEQ
 )
 
 if (PARADYNEQ_ENABLE_LICENSING)
+    target_compile_definitions(ParaDynEQ PUBLIC LICENSE_PRODUCT_VERSION="${PROJECT_VERSION}")
     target_link_libraries(ParaDynEQ PRIVATE juce::juce_cryptography)
     if (APPLE)
         target_link_libraries(ParaDynEQ PRIVATE "-framework IOKit")
@@ -142,4 +153,32 @@ if(PARADYNEQ_BUILD_TESTS)
     target_link_libraries(ParaDynEQTests PRIVATE juce::juce_dsp juce::juce_audio_basics
                           PUBLIC juce::juce_recommended_config_flags)
     add_test(NAME ParaDynEQDSP COMMAND ParaDynEQTests)
+    juce_add_console_app(ParaDynEQMatchTests PRODUCT_NAME "ParaDyn EQ Match Tests")
+    target_sources(ParaDynEQMatchTests PRIVATE Tests/MatchEQTests.cpp Source/MatchEQ.cpp)
+    target_link_libraries(ParaDynEQMatchTests PRIVATE juce::juce_dsp
+                          PUBLIC juce::juce_recommended_config_flags)
+    add_test(NAME ParaDynEQMatch COMMAND ParaDynEQMatchTests)
+
+    # Exercise processor state, host parameters, actual audio and editor layout
+    # without reading/writing the developer's licence or contacting a server.
+    juce_add_console_app(ParaDynEQMatchIntegrationTests PRODUCT_NAME "ParaDyn EQ Match Integration Tests")
+    set(PARADYNEQ_TEST_SOURCES ${PARADYNEQ_SOURCES})
+    list(FILTER PARADYNEQ_TEST_SOURCES EXCLUDE REGEX "/Licensing/")
+    target_sources(ParaDynEQMatchIntegrationTests PRIVATE Tests/MatchEQIntegrationTests.cpp ${PARADYNEQ_TEST_SOURCES})
+    target_compile_definitions(ParaDynEQMatchIntegrationTests PRIVATE
+        PARADYNEQ_ENABLE_LICENSING=0 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JucePlugin_Name="ParaDyn EQ")
+    target_link_libraries(ParaDynEQMatchIntegrationTests PRIVATE juce::juce_audio_utils juce::juce_dsp ParaDynEQAssets
+                          PUBLIC juce::juce_recommended_config_flags)
+    add_test(NAME ParaDynEQMatchIntegration COMMAND ParaDynEQMatchIntegrationTests)
+endif()
+
+if(PARADYNEQ_BUILD_TESTS AND PARADYNEQ_ENABLE_LICENSING)
+    juce_add_console_app(ParaDynEQFingerprintTests PRODUCT_NAME "ParaDyn EQ Fingerprint Tests")
+    target_sources(ParaDynEQFingerprintTests PRIVATE Tests/MachineFingerprintTests.cpp Source/Licensing/MachineFingerprint.cpp)
+    target_include_directories(ParaDynEQFingerprintTests PRIVATE Source)
+    target_link_libraries(ParaDynEQFingerprintTests PRIVATE juce::juce_cryptography)
+    if(APPLE)
+        target_link_libraries(ParaDynEQFingerprintTests PRIVATE "-framework IOKit")
+    endif()
+    add_test(NAME ParaDynEQFingerprint COMMAND ParaDynEQFingerprintTests)
 endif()

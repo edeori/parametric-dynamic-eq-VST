@@ -6,6 +6,7 @@
 #include "SpectrumAnalyzer.h"
 #include "BandEditor.h"
 #include "ParaDynLookAndFeel.h"
+#include "MatchEQPanel.h"
 
 #if PARADYNEQ_ENABLE_LICENSING
 #include "Licensing/LicenseManager.h"
@@ -98,6 +99,7 @@ private:
     juce::TooltipWindow tooltipWindow { this, 500 };
 
     SpectrumAnalyzer spectrumAnalyzer;
+    MatchEQPanel matchPanel;
     juce::Viewport bandStripViewport;
     juce::Component bandStripContent;
     std::vector<std::unique_ptr<juce::TextButton>> bandButtons;

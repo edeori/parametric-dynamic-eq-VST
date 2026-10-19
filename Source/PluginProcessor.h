@@ -10,6 +10,7 @@
 #include "Oversampler.h"
 #include "Parameters.h"
 #include "SpectrumFifo.h"
+#include "MatchEQ.h"
 
 #if PARADYNEQ_ENABLE_LICENSING
 #include "Licensing/LicenseManager.h"
@@ -69,6 +70,10 @@ public:
     EQBand::Params getBandParams (int slot) const noexcept;
     SpectrumFifo& getInputSpectrumFifo() noexcept { return inputSpectrum; }
     SpectrumFifo& getOutputSpectrumFifo() noexcept { return outputSpectrum; }
+    MatchEQ& getMatchEQ() noexcept { return matchEQ; }
+    juce::Result applyMatchEQ();
+    bool undoMatchEQ();
+    bool canUndoMatchEQ() const;
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
@@ -76,6 +81,10 @@ private:
     std::array<EQBand, ParaDynConstants::maxBands> bands;
     Oversampler oversampler;
     SpectrumFifo inputSpectrum, outputSpectrum;
+    MatchEQ matchEQ;
+    mutable juce::CriticalSection matchUndoLock;
+    std::vector<std::pair<juce::String, float>> matchUndo;
+    void setMatchParameter (const juce::String&, float);
 
     std::array<std::atomic<float>*, ParaDynConstants::maxBands> activeParams {};
     std::array<std::atomic<float>*, ParaDynConstants::maxBands> frequencyParams {};

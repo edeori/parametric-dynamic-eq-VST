@@ -22,6 +22,7 @@ cmake_args=(
     -B "$BUILD_DIR"
     -DCMAKE_BUILD_TYPE="$CONFIG"
     -DPARADYNEQ_BUILD_TESTS=ON
+    -DPARADYNEQ_ENABLE_LICENSING="${PARADYNEQ_ENABLE_LICENSING:-ON}"
 )
 if [[ -n "$JUCE_SOURCE_DIR" ]]; then
     cmake_args+=("-DFETCHCONTENT_SOURCE_DIR_JUCE=$JUCE_SOURCE_DIR")
@@ -36,10 +37,14 @@ else
     jobs="${NUMBER_OF_PROCESSORS:-4}"
 fi
 
+extra_targets=()
+if [[ "${PARADYNEQ_ENABLE_LICENSING:-ON}" == "ON" ]]; then
+    extra_targets+=(ParaDynEQFingerprintTests)
+fi
 echo "==> Building VST3, AU, Standalone and tests"
 cmake --build "$BUILD_DIR" --config "$CONFIG" \
-    --target ParaDynEQ_VST3 ParaDynEQ_AU ParaDynEQ_Standalone ParaDynEQTests \
-    --parallel "$jobs"
+    --target ParaDynEQ_VST3 ParaDynEQ_AU ParaDynEQ_Standalone ParaDynEQTests ParaDynEQMatchTests ParaDynEQMatchIntegrationTests \
+    "${extra_targets[@]}" --parallel "$jobs"
 
 echo "==> Running DSP tests"
 ctest --test-dir "$BUILD_DIR" -C "$CONFIG" --output-on-failure

@@ -96,7 +96,7 @@ void ParaDynLicenseOverlayComponent::paint (juce::Graphics& g)
 #endif
 
 ParaDynAudioProcessorEditor::ParaDynAudioProcessorEditor (ParaDynAudioProcessor& owner)
-    : AudioProcessorEditor (owner), audioProcessor (owner), spectrumAnalyzer (owner), bandEditor (owner)
+    : AudioProcessorEditor (owner), audioProcessor (owner), spectrumAnalyzer (owner), matchPanel (owner), bandEditor (owner)
 {
     setLookAndFeel (&lookAndFeel);
 
@@ -189,6 +189,7 @@ ParaDynAudioProcessorEditor::ParaDynAudioProcessorEditor (ParaDynAudioProcessor&
     addAndMakeVisible (rangeLabel);
 
     addAndMakeVisible (spectrumAnalyzer);
+    addAndMakeVisible (matchPanel);
 
     bandStripViewport.setViewedComponent (&bandStripContent, false);
     bandStripViewport.setScrollBarsShown (false, true);
@@ -267,7 +268,10 @@ void ParaDynAudioProcessorEditor::rebuildBandStrip()
     bandButtons.clear();
     bandButtonSlots.clear();
 
-    constexpr int buttonWidth = 74, buttonHeight = 26, spacing = 6;
+    const auto scale = (float) getWidth() / designWidth;
+    const int buttonWidth = juce::roundToInt (74.0f * scale);
+    const int buttonHeight = juce::roundToInt (26.0f * scale);
+    const int spacing = juce::roundToInt (6.0f * scale);
     int x = spacing;
     for (auto slot : audioProcessor.getActiveBandSlots())
     {
@@ -471,11 +475,16 @@ void ParaDynAudioProcessorEditor::resized()
     // --- Content rows (637px design box = 715 - 78 header, see PORTING.md) ----
     float rowY = headerH;
     rowY += 3.0f; // gap
-    const float spectrumH = 339.0f;
+    matchPanel.setBounds (bounds (sidePad, rowY, designWidth - sidePad * 2.0f, 82.0f));
+    rowY += 88.0f;
+    const float spectrumH = 237.0f;
     spectrumAnalyzer.setBounds (bounds (sidePad, rowY, designWidth - sidePad * 2.0f, spectrumH));
     rowY += spectrumH + 8.0f;
 
-    const float tabsH = 34.0f;
+    // Match creates enough tabs to scroll. Reserve space below the buttons for
+    // the horizontal scrollbar instead of letting it cover the labels.
+    const float tabsH = 48.0f;
+    bandStripViewport.setScrollBarThickness (juce::jmax (4, juce::roundToInt (6.0f * sy)));
     bandStripViewport.setBounds (bounds (sidePad, rowY, designWidth - sidePad * 2.0f, tabsH));
     rowY += tabsH + 6.0f;
 

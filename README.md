@@ -1,5 +1,43 @@
 # parametric-dynamic-eq-VST
 
+## Match EQ
+
+A spektrum feletti Match EQ panellel egy referenciasáv átlagos hangszínéhez
+illeszthetsz egy másik sávot:
+
+1. A referenciasávon nyomd meg a **Learn Reference** gombot, és játssz le egy
+   jellemző részletet. **Stop & Keep** lezárja a tanulást; 12 másodpercnyi
+   értékelhető hang után automatikusan lezárul. Legalább 1 másodperc szükséges,
+   a csendet figyelmen kívül hagyja. Hosszabb, reprezentatív részletet érdemes használni.
+2. A pluginpéldányt mozgasd/másold a célsávra. A referencia a plugin állapotával
+   együtt megmarad. Másik példányhoz vagy projekthez használható a **Save Ref...** /
+   **Load Ref...** (`.pdeqref`) is.
+3. A célsávon indítsd el a **Learn Target** tanulást, majd állítsd le, vagy várd
+   meg az automatikus befejezést. Mindkét tanulás a plugin EQ előtti bemenetét méri.
+4. Az **Apply Match** a jelenlegi EQ-sávokat 16 szerkeszthető, statikus sztereó
+   haranggörbére cseréli. Az **Undo Match** az utolsó alkalmazás előtti sávokat
+   állítja vissza (beleértve a Solo/Mute/Dynamic beállításokat). Ez az egyszeri
+   visszaállítás az adott pluginpéldány életében érhető el, projektből nem töltődik vissza.
+
+**Amount**: az illesztés erőssége, 0–100%. **Smoothing**: spektrális simítás,
+0,15–2 oktáv; nagyobb érték szélesebb korrekciókat ad. **Max +/-**: az összesített
+korrekció emelési/vágási korlátja, 1–18 dB. A beállítások változtatása után ismét
+nyomd meg az **Apply Match** gombot. A kézi sávszerkesztéseket ez ismét lecseréli.
+
+A tanulás és a beállítások DAW-projektbe mentődnek. A tanulás az editor bezárása
+után is folytatódik; félkész tanulás helyett a legutóbbi kész profil mentődik.
+Az összhangerő eltérését az illesztés kiszűri; az Output értéke változatlan marad.
+Ha a Bypass aktív, kapcsold ki a korrekció meghallgatásához.
+
+Ez átlagos tónusillesztés: a dinamikát, torzítást vagy térérzetet nem másolja át.
+A nagyon halk vagy a másik felvételből hiányzó frekvenciatartományokra nem készít
+erős helyreállító emelést. A 16 sáv közelítést ad, nem pontonkénti spektrummásolatot.
+
+Fejlesztői ellenőrzés: `./build.sh` fordítja a VST3/AU/Standalone formátumokat,
+és futtatja a DSP- és Match EQ-teszteket. A Match EQ tesztjei lefedik a
+hangerőfüggetlenséget, a tényleges szűrőválaszt, több mintavételi frekvenciát,
+a sztereó ellenfázist, a mentést/betöltést és a tanulás életciklusát.
+
 ## Licencelés
 
 A ParaDyn EQ a Moth Production megosztott licencelési moduljét használja
@@ -52,3 +90,7 @@ CMake opció vezérli (alapértelmezett `ON`).
   aktiváló szerver + Docker deploy, megosztva az egész terméksorral). A
   ParaDyn EQ saját `Source/Licensing/` mappája ennek egy vendorolt
   (nem submodule) másolata (a DeathWings-VST-ből átemelve).
+
+## GitHub release
+
+See [RELEASE_PIPELINE.md](docs/RELEASE_PIPELINE.md) for licensed Mac/Windows builds, binary verification and separate manual publication. Licensing product ID: `paradyn-eq`.
