@@ -37,3 +37,24 @@ change visibility, availability or price. Build alone never uploads to MinIO.
 - Windows Defender clean, exit code 0. Installer SHA-256: `a6b57f919146adf8dbc8c96504da809de4b44920bca7ad46b78a1d53ef9e9b49`.
 - Publish verification [39302757282](https://github.com/edeori/parametric-dynamic-eq-VST/actions/runs/39302757282): selected build 39302735284; provenance and file/hash checks passed; upload step skipped. No live installers published.
 - Local universal build and all four tests also passed. A real license-key activation against the server was not performed.
+
+## Automatic versions
+
+A push to main or a new manual branch build increments the patch version in
+CMakeLists.txt and commits it back before building. Both platforms use that
+reserved commit. Pull the bot commit before your next local push. A rerun of
+an existing run keeps its version; failed builds consume a version. Explicit
+vX.Y.Z tags must match CMake and preserve the tagged version. Publish never
+changes versions and remains a separate manual action.
+
+The release-metadata artifact records both the triggering commit and the actual
+versioned build commit. Publish validates and reports the actual build commit.
+
+Automatic-version integration verified on 2026-10-19 using ParaDyn EQ:
+[build 39305139718](https://github.com/edeori/parametric-dynamic-eq-VST/actions/runs/39305139718)
+reserved 0.1.2 in commit `35235e3ade46bc4d1050a6296d3bcc385c1eda0a`.
+Both platforms passed, including licensing checks, Apple notarization and Defender.
+Downloaded Windows ProductVersion, Mac package version and all three Mac bundle
+versions were checked as 0.1.2.
+[Publish verification 39305375515](https://github.com/edeori/parametric-dynamic-eq-VST/actions/runs/39305375515)
+validated the reserved commit/version and both installers; live upload was skipped.
