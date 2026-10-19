@@ -2,3 +2,6 @@ build/
 .DS_Store
 *.xcodeproj
 *.xcworkspace
+
+# Local agent workspace state
+.serena/
