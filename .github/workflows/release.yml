@@ -2,12 +2,13 @@ name: Build installers
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     tags: ['v*']
 permissions:
-  contents: read
+  contents: write
 jobs:
   release:
-    uses: edeori/vst-release-pipeline/.github/workflows/vst-release.yml@4c3f032eb8ec2cf96673f992a8241653c1f1a5eb
+    uses: edeori/vst-release-pipeline/.github/workflows/vst-release.yml@87842d30522e76111d68b91e50a55759336ba201
     with:
       product-id: paradyn-eq
       publish: false

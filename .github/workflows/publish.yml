@@ -22,7 +22,7 @@ permissions:
   actions: read
 jobs:
   publish:
-    uses: edeori/vst-release-pipeline/.github/workflows/vst-publish.yml@4c3f032eb8ec2cf96673f992a8241653c1f1a5eb
+    uses: edeori/vst-release-pipeline/.github/workflows/vst-publish.yml@87842d30522e76111d68b91e50a55759336ba201
     with:
       product-id: paradyn-eq
       build-selection: ${{ inputs.build_selection == 'Specific build ID' && 'specific' || 'latest' }}
