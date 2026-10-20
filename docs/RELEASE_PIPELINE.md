@@ -66,3 +66,19 @@ Version **0.1.2**, built source `35235e3ade46bc4d1050a6296d3bcc385c1eda0a`.
 The published Mac package version and Windows ProductVersion were verified; the
 live EXE SHA-256 matches the clean Defender report. Shop version updated after
 publication. See the [shared release record](https://github.com/edeori/vst-release-pipeline/blob/main/docs/releases/2026-10-19-version-rollout.md) for all products and hashes.
+
+## Verified release candidate — 2026-10-20
+
+Version **0.1.4**, built source `398334b917f596d63f290f8b75322e73ba88c9e2`,
+triggered by `7353eff35901094c7797efc4161e18edd443827d`.
+Includes captured spectrum overlays, editable correction display and automatic
+dynamic Match EQ with bounded reduction and temporal capture analysis.
+
+- [Build 39498311429](https://github.com/edeori/parametric-dynamic-eq-VST/actions/runs/39498311429): macOS and Windows successful; all four tests passed on each platform.
+- Apple notarization accepted; package signature and stapling checks passed.
+- Defender clean, exit code 0; Windows installer SHA-256 `8ad83ac1ca73c314fa3656e0045cf41c7afa46238dde740f627bb135ad2dedf3`.
+- [Publish verification 39499716231](https://github.com/edeori/parametric-dynamic-eq-VST/actions/runs/39499716231): verified the exact build, source/version, installers and Defender hash; publication step skipped.
+
+No live installers changed in this verification. Live Shop version remains 0.1.2.
+To publish this candidate, run Publish installers with Specific build ID
+`39498311429` and `verify_only=false` after the live publication decision.
