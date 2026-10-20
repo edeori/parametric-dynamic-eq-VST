@@ -82,3 +82,16 @@ dynamic Match EQ with bounded reduction and temporal capture analysis.
 No live installers changed in this verification. Live Shop version remains 0.1.2.
 To publish this candidate, run Publish installers with Specific build ID
 `39498311429` and `verify_only=false` after the live publication decision.
+
+## Live release — 2026-10-20
+
+Version **0.1.4** published after explicit approval using build `39498311429`.
+[Publication 39500723364](https://github.com/edeori/parametric-dynamic-eq-VST/actions/runs/39500723364)
+succeeded. Both public downloads were compared byte-for-byte with the verified
+build artifacts and match. Mac PKG SHA-256:
+`0c8028ae42fa201002baa0bdab96b054b3e17324bf657abe2cdf31e8b4a3437b`;
+Windows SHA-256 matches the Defender report above.
+
+The live Shop product version was changed from 0.1.2 to 0.1.4 and verified in
+the public Shop HTML. Other product fields were preserved. Server backup:
+`/srv/mothproduction-web/.deploy-backups/paradyn-eq-0.1.4-20261020T213022Z/shop.md`.
