@@ -60,7 +60,9 @@ void EQBand::process (juce::dsp::AudioBlock<float>& block, const Params& p) noex
         if (samplesSinceRecompute >= controlRateBlockSize)
         {
             samplesSinceRecompute = 0;
-            const auto dynamicReduction = p.dynamicEnabled ? detector.getCurrentReductionDb() : 0.0f;
+            auto dynamicReduction = p.dynamicEnabled ? detector.getCurrentReductionDb() : 0.0f;
+            if (p.rangeDb > 0.0f)
+                dynamicReduction = juce::jmin (dynamicReduction, p.rangeDb);
             lastDynamicReductionDb.store (dynamicReduction);
             const auto effectiveGain = staticGain - dynamicReduction;
 

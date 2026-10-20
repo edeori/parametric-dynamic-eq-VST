@@ -36,8 +36,8 @@ private:
     juce::Slider frequencySlider, gainSlider, qSlider;
     juce::Label frequencyLabel, gainLabel, qLabel;
     juce::ToggleButton dynamicToggle { "Dynamic" };
-    juce::Slider thresholdSlider, ratioSlider, attackSlider, releaseSlider, kneeSlider;
-    juce::Label thresholdLabel, ratioLabel, attackLabel, releaseLabel, kneeLabel;
+    juce::Slider thresholdSlider, ratioSlider, attackSlider, releaseSlider, kneeSlider, rangeSlider;
+    juce::Label thresholdLabel, ratioLabel, attackLabel, releaseLabel, kneeLabel, rangeLabel;
     juce::ToggleButton soloButton { "Solo" }, muteButton { "Mute" };
     juce::TextButton removeButton { "Remove" };
     juce::TextButton addButton { "Add band" };
@@ -49,7 +49,7 @@ private:
     std::unique_ptr<SliderAttachment> frequencyAttachment, gainAttachment, qAttachment;
     std::unique_ptr<ButtonAttachment> dynamicAttachment, soloAttachment, muteAttachment;
     std::unique_ptr<SliderAttachment> thresholdAttachment, ratioAttachment, attackAttachment,
-        releaseAttachment, kneeAttachment;
+        releaseAttachment, kneeAttachment, rangeAttachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BandEditor)
 };

@@ -34,6 +34,12 @@ public:
     void setGainRangeDb (float newRangeDb) noexcept;
     float getGainRangeDb() const noexcept { return gainRangeDb; }
 
+    // Combined EQ response at a given frequency. includeDynamics=false returns the
+    // static (configured gain) sum; includeDynamics=true folds in the live dynamic
+    // reductions reported by each band's detector. Used by tests to verify
+    // the values actually shown in the display.
+    float getCorrectionResponseDb (float frequencyHz, bool includeDynamics) const;
+
 private:
     void timerCallback() override;
     juce::Rectangle<float> graphBounds() const;
@@ -45,6 +51,7 @@ private:
     int bandNodeNear (float x, float y) const;
     void updatePath (const std::array<float, SpectrumFifo::fftSize>&, juce::Path&, std::array<float, SpectrumFifo::fftSize / 2>&);
     float bandMagnitudeResponseDb (const EQBand::Params&, float frequencyHz) const;
+    float summedStaticResponseDb (float frequencyHz) const;
     float summedMagnitudeResponseDb (float frequencyHz) const;
     void updateResponseCurve();
 
@@ -55,7 +62,8 @@ private:
     std::array<float, SpectrumFifo::fftSize> inputSamples {}, outputSamples {};
     std::array<float, SpectrumFifo::fftSize * 2> fftData {};
     std::array<float, SpectrumFifo::fftSize / 2> inputMagnitudes {}, outputMagnitudes {};
-    juce::Path inputPath, outputPath, responseCurve;
+    juce::Path inputPath, outputPath, staticCorrectionCurve, dynamicEffectiveCurve;
+    bool hasDynamicBands = false;
 
     int draggedBand = -1;
     bool draggingGain = false;

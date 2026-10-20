@@ -46,9 +46,11 @@ BandEditor::BandEditor (ParaDynAudioProcessor& owner) : processor (owner)
     styleRotarySlider (attackSlider, attackLabel, "Attack");
     styleRotarySlider (releaseSlider, releaseLabel, "Release");
     styleRotarySlider (kneeSlider, kneeLabel, "Knee");
-    for (auto* s : { &thresholdSlider, &ratioSlider, &attackSlider, &releaseSlider, &kneeSlider })
+    styleRotarySlider (rangeSlider, rangeLabel, "Range");
+    rangeSlider.setTooltip ("Maximum dynamic gain reduction in dB. 0 = unlimited. Turn Dynamic off to disable dynamic correction.");
+    for (auto* s : { &thresholdSlider, &ratioSlider, &attackSlider, &releaseSlider, &kneeSlider, &rangeSlider })
         addAndMakeVisible (s);
-    for (auto* l : { &thresholdLabel, &ratioLabel, &attackLabel, &releaseLabel, &kneeLabel })
+    for (auto* l : { &thresholdLabel, &ratioLabel, &attackLabel, &releaseLabel, &kneeLabel, &rangeLabel })
         addAndMakeVisible (l);
 
     addAndMakeVisible (soloButton);
@@ -59,6 +61,7 @@ BandEditor::BandEditor (ParaDynAudioProcessor& owner) : processor (owner)
     removeButton.onClick = [this] { if (shownSlot >= 0) processor.removeBand (shownSlot); };
     addButton.onClick = [this] { processor.addBand(); };
 
+    timerCallback();
     startTimerHz (20);
 }
 
@@ -76,9 +79,9 @@ void BandEditor::timerCallback()
 void BandEditor::updateDynamicControlsEnabled()
 {
     const auto enabled = shownSlot >= 0 && dynamicToggle.getToggleState();
-    for (auto* s : { &thresholdSlider, &ratioSlider, &attackSlider, &releaseSlider, &kneeSlider })
+    for (auto* s : { &thresholdSlider, &ratioSlider, &attackSlider, &releaseSlider, &kneeSlider, &rangeSlider })
         s->setEnabled (enabled);
-    for (auto* l : { &thresholdLabel, &ratioLabel, &attackLabel, &releaseLabel, &kneeLabel })
+    for (auto* l : { &thresholdLabel, &ratioLabel, &attackLabel, &releaseLabel, &kneeLabel, &rangeLabel })
         l->setEnabled (enabled);
 }
 
@@ -104,7 +107,7 @@ void BandEditor::rebuildForSelectedBand (int slot)
     frequencyAttachment.reset(); gainAttachment.reset(); qAttachment.reset();
     dynamicAttachment.reset(); soloAttachment.reset(); muteAttachment.reset();
     thresholdAttachment.reset(); ratioAttachment.reset(); attackAttachment.reset();
-    releaseAttachment.reset(); kneeAttachment.reset();
+    releaseAttachment.reset(); kneeAttachment.reset(); rangeAttachment.reset();
 
     const auto hasBand = slot >= 0;
     for (auto* c : { (juce::Component*) &titleLabel, (juce::Component*) &filterTypeBox, (juce::Component*) &channelModeBox,
@@ -138,6 +141,7 @@ void BandEditor::rebuildForSelectedBand (int slot)
     attackAttachment = std::make_unique<SliderAttachment> (apvts, ParamIDs::attack (slot), attackSlider);
     releaseAttachment = std::make_unique<SliderAttachment> (apvts, ParamIDs::release (slot), releaseSlider);
     kneeAttachment = std::make_unique<SliderAttachment> (apvts, ParamIDs::knee (slot), kneeSlider);
+    rangeAttachment = std::make_unique<SliderAttachment> (apvts, ParamIDs::range (slot), rangeSlider);
     resized();
 }
 
@@ -213,7 +217,7 @@ void BandEditor::resized()
     dynamicColumn.removeFromTop (10);
     layoutKnobRow (dynamicColumn, { { &thresholdSlider, &thresholdLabel }, { &ratioSlider, &ratioLabel },
                                      { &attackSlider, &attackLabel }, { &releaseSlider, &releaseLabel },
-                                     { &kneeSlider, &kneeLabel } });
+                                     { &kneeSlider, &kneeLabel }, { &rangeSlider, &rangeLabel } });
 }
 
 void BandEditor::paint (juce::Graphics& g)

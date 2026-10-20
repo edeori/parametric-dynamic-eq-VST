@@ -14,7 +14,11 @@ namespace
     // glance: input = electric blue, output = hot magenta.
     const juce::Colour inputColour { 0xff2e86ff };
     const juce::Colour outputColour { 0xffff2e8c };
+    const juce::Colour referenceColour { 0xff42d9ed };
+    const juce::Colour targetColour { 0xffffa052 };
     const juce::Colour responseColour { 0xffffffff };
+    const juce::Colour eqCorrectionColour { 0xff82e040 }; // lime green: static EQ correction on gain scale
+    const juce::Colour eqDynamicColour    { 0xffffb930 }; // amber: instantaneous dynamic effective response
     const juce::Colour nodeColour { 0xffb9c2cc };
     const juce::Colour selectedNodeColour { 0xffffcc33 };
 }
@@ -297,6 +301,16 @@ void SpectrumAnalyzer::updatePath (const std::array<float, SpectrumFifo::fftSize
 float SpectrumAnalyzer::bandMagnitudeResponseDb (const EQBand::Params& p, float frequencyHz) const
 {
     const auto sampleRate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 44100.0;
+    // Bell bands: use the exact TPT SVF formula at the actual oversampled processing rate.
+    // All other filter types keep the existing RBJ visual approximation (per-task scope).
+    if (p.filterType == FilterType::Bell)
+    {
+        const auto factor = juce::jlimit (0, 3, juce::roundToInt (
+            processor.apvts.getRawParameterValue (ParamIDs::oversampling)->load()));
+        return (float) MatchEQ::responseDb ({ p.frequencyHz, p.gainDb, p.q },
+                                            (double) frequencyHz,
+                                            sampleRate * (double) (1 << factor));
+    }
     const auto w0 = juce::MathConstants<double>::twoPi * (double) p.frequencyHz / sampleRate;
     const auto q = juce::jmax (0.05, (double) p.q);
     const auto alpha = std::sin (w0) / (2.0 * q);
@@ -369,11 +383,23 @@ float SpectrumAnalyzer::bandMagnitudeResponseDb (const EQBand::Params& p, float 
     return db;
 }
 
+float SpectrumAnalyzer::summedStaticResponseDb (float frequencyHz) const
+{
+    float totalDb = 0.0f;
+    for (auto slot : processor.getActiveBandSlots())
+    {
+        if (processor.isBandMuted (slot)) continue;
+        totalDb += bandMagnitudeResponseDb (processor.getBandParams (slot), frequencyHz);
+    }
+    return totalDb;
+}
+
 float SpectrumAnalyzer::summedMagnitudeResponseDb (float frequencyHz) const
 {
     float totalDb = 0.0f;
     for (auto slot : processor.getActiveBandSlots())
     {
+        if (processor.isBandMuted (slot)) continue;
         auto params = processor.getBandParams (slot);
         if (params.dynamicEnabled)
             params.gainDb -= processor.getBandDynamicReductionDb (slot);
@@ -385,15 +411,35 @@ float SpectrumAnalyzer::summedMagnitudeResponseDb (float frequencyHz) const
 void SpectrumAnalyzer::updateResponseCurve()
 {
     const auto bounds = graphBounds();
-    responseCurve.clear();
+    staticCorrectionCurve.clear();
+    dynamicEffectiveCurve.clear();
+    hasDynamicBands = false;
+    for (auto slot : processor.getActiveBandSlots())
+        if (! processor.isBandMuted (slot) && processor.getBandParams (slot).dynamicEnabled)
+            { hasDynamicBands = true; break; }
     for (int pixel = 0; pixel <= (int) bounds.getWidth(); ++pixel)
     {
         const auto x = bounds.getX() + (float) pixel;
         const auto freq = xToFrequency (x);
-        const auto db = summedMagnitudeResponseDb (freq);
-        const auto y = gainToY (db);
-        if (pixel == 0) responseCurve.startNewSubPath (x, y); else responseCurve.lineTo (x, y);
+        const auto staticY = gainToY (getCorrectionResponseDb (freq, false));
+        const auto dynamicY = hasDynamicBands ? gainToY (getCorrectionResponseDb (freq, true)) : staticY;
+        if (pixel == 0)
+        {
+            staticCorrectionCurve.startNewSubPath (x, staticY);
+            dynamicEffectiveCurve.startNewSubPath (x, dynamicY);
+        }
+        else
+        {
+            staticCorrectionCurve.lineTo (x, staticY);
+            dynamicEffectiveCurve.lineTo (x, dynamicY);
+        }
     }
+}
+
+float SpectrumAnalyzer::getCorrectionResponseDb (float frequencyHz, bool includeDynamics) const
+{
+    return includeDynamics ? summedMagnitudeResponseDb (frequencyHz)
+                           : summedStaticResponseDb (frequencyHz);
 }
 
 void SpectrumAnalyzer::paint (juce::Graphics& g)
@@ -445,8 +491,85 @@ void SpectrumAnalyzer::paint (juce::Graphics& g)
     g.strokePath (inputPath, juce::PathStrokeType (1.2f));
     g.setColour (outputColour.withAlpha (0.9f));
     g.strokePath (outputPath, juce::PathStrokeType (1.6f));
-    g.setColour (responseColour.withAlpha (0.55f));
-    g.strokePath (responseCurve, juce::PathStrokeType (1.2f));
+
+    const auto profiles = processor.getMatchEQ().getProfiles();
+    const std::array<juce::Colour, 2> profileColours { referenceColour, targetColour };
+    const std::array<juce::String, 2> profileLabels { "Captured Reference", "Captured Target" };
+    auto legendX = bounds.getX() + 8.0f;
+    for (size_t profileIndex = 0; profileIndex < profiles.size(); ++profileIndex)
+    {
+        const auto& profile = profiles[profileIndex];
+        if (! profile.valid) continue;
+
+        juce::Path path;
+        bool started = false;
+        for (int point = 0; point < MatchEQ::pointCount; ++point)
+        {
+            const auto frequency = MatchEQ::frequency (point);
+            if (frequency >= profile.sampleRate * 0.49) break;
+            const auto db = profile.db[(size_t) point];
+            if (! std::isfinite (db)) { started = false; continue; }
+            // Capture stores power / N^2; the live FFT uses amplitude * 2 / N.
+            // Convert to the same one-sided amplitude scale without normalising
+            // the profiles independently, preserving their relative levels.
+            const auto x = frequencyToX ((float) frequency);
+            const auto y = spectrumDbToY ((float) db + 6.0206f);
+            if (! started) path.startNewSubPath (x, y); else path.lineTo (x, y);
+            started = true;
+        }
+        g.setColour (profileColours[profileIndex]);
+        g.strokePath (path, juce::PathStrokeType (2.0f));
+
+        const juce::Rectangle<float> legend (legendX, bounds.getY() + 4.0f, 142.0f, 18.0f);
+        g.setColour (juce::Colour (0xff0b0d10).withAlpha (0.9f));
+        g.fillRoundedRectangle (legend, 3.0f);
+        g.setColour (profileColours[profileIndex]);
+        g.drawLine (legendX + 5.0f, legend.getCentreY(), legendX + 21.0f, legend.getCentreY(), 2.0f);
+        g.setFont (11.0f);
+        g.drawText (profileLabels[profileIndex], legend.withTrimmedLeft (27.0f), juce::Justification::centredLeft);
+        legendX += legend.getWidth() + 6.0f;
+    }
+
+    // EQ correction legend entries -- only when bands exist, fitted after profile entries
+    if (! processor.getActiveBandSlots().empty())
+    {
+        constexpr float eqLegendW = 122.0f;
+        if (legendX + eqLegendW + 8.0f <= bounds.getRight())
+        {
+            const juce::Rectangle<float> eqLegend (legendX, bounds.getY() + 4.0f, eqLegendW, 18.0f);
+            g.setColour (juce::Colour (0xff0b0d10).withAlpha (0.9f));
+            g.fillRoundedRectangle (eqLegend, 3.0f);
+            g.setColour (eqCorrectionColour);
+            g.drawLine (legendX + 5.0f, eqLegend.getCentreY(), legendX + 21.0f, eqLegend.getCentreY(), 2.0f);
+            g.setFont (11.0f);
+            g.drawText ("EQ Correction", eqLegend.withTrimmedLeft (27.0f), juce::Justification::centredLeft);
+            legendX += eqLegendW + 6.0f;
+        }
+        if (hasDynamicBands)
+        {
+            constexpr float dynLegendW = 140.0f;
+            if (legendX + dynLegendW + 8.0f <= bounds.getRight())
+            {
+                const juce::Rectangle<float> dynLegend (legendX, bounds.getY() + 4.0f, dynLegendW, 18.0f);
+                g.setColour (juce::Colour (0xff0b0d10).withAlpha (0.9f));
+                g.fillRoundedRectangle (dynLegend, 3.0f);
+                g.setColour (eqDynamicColour);
+                g.drawLine (legendX + 5.0f, dynLegend.getCentreY(), legendX + 21.0f, dynLegend.getCentreY(), 1.5f);
+                g.setFont (11.0f);
+                g.drawText ("Dynamic Response", dynLegend.withTrimmedLeft (27.0f), juce::Justification::centredLeft);
+            }
+        }
+    }
+
+    // EQ correction curve (static configured gains, on gain scale) -- primary display
+    g.setColour (eqCorrectionColour.withAlpha (0.9f));
+    g.strokePath (staticCorrectionCurve, juce::PathStrokeType (2.0f));
+    // Instantaneous dynamic effective response -- only drawn when dynamic bands are active
+    if (hasDynamicBands)
+    {
+        g.setColour (eqDynamicColour.withAlpha (0.65f));
+        g.strokePath (dynamicEffectiveCurve, juce::PathStrokeType (1.5f));
+    }
 
     const auto selected = processor.getSelectedBand();
     for (auto slot : processor.getActiveBandSlots())
@@ -462,6 +585,19 @@ void SpectrumAnalyzer::paint (juce::Graphics& g)
         g.drawEllipse (juce::Rectangle<float> (11.0f, 11.0f).withCentre ({ x, y }), soloed ? 3.0f : 1.6f);
         if (slot == selected)
             g.fillEllipse (juce::Rectangle<float> (5.0f, 5.0f).withCentre ({ x, y }));
+        // Per-band dynamic reduction indicator: small vertical bar from configured gain to
+        // effective gain, drawn to the right of the node so the node position stays readable.
+        if (p.dynamicEnabled && ! processor.isBandMuted (slot))
+        {
+            const auto reductionDb = processor.getBandDynamicReductionDb (slot);
+            if (std::abs (reductionDb) > 0.1f)
+            {
+                const auto effectiveY = gainToY (p.gainDb - reductionDb);
+                g.setColour (eqDynamicColour.withAlpha (0.8f));
+                g.drawLine (x + 8.0f, y, x + 8.0f, effectiveY, 2.0f);
+                g.drawLine (x + 5.0f, effectiveY, x + 11.0f, effectiveY, 1.5f);
+            }
+        }
     }
 
     g.setColour (juce::Colour (0xff2a2e33));

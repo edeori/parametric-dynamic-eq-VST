@@ -44,6 +44,7 @@ ParaDynAudioProcessor::ParaDynAudioProcessor()
         kneeParams[(size_t) i] = apvts.getRawParameterValue (ParamIDs::knee (i));
         soloParams[(size_t) i] = apvts.getRawParameterValue (ParamIDs::solo (i));
         muteParams[(size_t) i] = apvts.getRawParameterValue (ParamIDs::mute (i));
+        rangeParams[(size_t) i] = apvts.getRawParameterValue (ParamIDs::range (i));
     }
 
 #if PARADYNEQ_ENABLE_LICENSING
@@ -112,6 +113,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout ParaDynAudioProcessor::creat
             juce::ParameterID { ParamIDs::solo (i), 1 }, "Solo" + suffix, false));
         layout.add (std::make_unique<juce::AudioParameterBool> (
             juce::ParameterID { ParamIDs::mute (i), 1 }, "Mute" + suffix, false));
+    }
+    // Range params appended AFTER the main loop so existing host parameter indices
+    // never shift. Default 0 = unlimited (legacy behaviour).
+    for (int i = 0; i < ParaDynConstants::maxBands; ++i)
+    {
+        const auto suffix = " " + juce::String (i + 1);
+        layout.add (floatParam (ParamIDs::range (i), "Range" + suffix,
+                                { 0.0f, 24.0f, 0.01f }, 0.0f, "dB"));
     }
     return layout;
 }
@@ -191,6 +200,15 @@ bool ParaDynAudioProcessor::addBand (float preferredFrequencyHz)
         active->setValueNotifyingHost (1.0f);
         active->endChangeGesture();
     }
+    // Ensure range starts at 0 (unlimited) when a slot is reused after a prior
+    // dynamic band occupied it; avoids stale non-zero range on a fresh static band.
+    if (auto* rangeParam = apvts.getParameter (ParamIDs::range (freeSlot)))
+    {
+        rangeParam->beginChangeGesture();
+        rangeParam->setValueNotifyingHost (
+            apvts.getParameterRange (rangeParam->getParameterID()).convertTo0to1 (0.0f));
+        rangeParam->endChangeGesture();
+    }
     bands[(size_t) freeSlot].reset();
     setSelectedBand (freeSlot);
     return true;
@@ -231,6 +249,11 @@ bool ParaDynAudioProcessor::isBandSoloed (int slot) const noexcept
     return slot >= 0 && slot < ParaDynConstants::maxBands && soloParams[(size_t) slot]->load() >= 0.5f;
 }
 
+bool ParaDynAudioProcessor::isBandMuted (int slot) const noexcept
+{
+    return slot >= 0 && slot < ParaDynConstants::maxBands && muteParams[(size_t) slot]->load() >= 0.5f;
+}
+
 float ParaDynAudioProcessor::getBandDynamicReductionDb (int slot) const noexcept
 {
     if (slot < 0 || slot >= ParaDynConstants::maxBands)
@@ -257,6 +280,7 @@ EQBand::Params ParaDynAudioProcessor::getBandParams (int slot) const noexcept
     p.attackMs = attackParams[s]->load();
     p.releaseMs = releaseParams[s]->load();
     p.kneeDb = kneeParams[s]->load();
+    p.rangeDb = rangeParams[s]->load();
     return p;
 }
 
@@ -363,7 +387,29 @@ void ParaDynAudioProcessor::setStateInformation (const void* data, int size)
             matchUndo.clear();
             matchEQ.restoreState (xml->getChildByName ("MatchEQ"));
             if (auto* child = xml->getChildByName ("MatchEQ")) xml->removeChildElement (child, true);
-            apvts.replaceState (juce::ValueTree::fromXml (*xml));
+            auto state = juce::ValueTree::fromXml (*xml);
+            // Old states omit range params; append defaults so the loaded state is never
+            // stale (a missing range param would leave the current range value untouched).
+            for (int i = 0; i < ParaDynConstants::maxBands; ++i)
+            {
+                const auto rangeID = ParamIDs::range (i);
+                bool found = false;
+                for (int c = 0; c < state.getNumChildren(); ++c)
+                {
+                    auto paramChild = state.getChild (c);
+                    if (paramChild.getType() == juce::Identifier ("PARAM")
+                        && paramChild.getProperty ("id").toString() == rangeID)
+                    { found = true; break; }
+                }
+                if (! found)
+                {
+                    juce::ValueTree param ("PARAM");
+                    param.setProperty ("id", rangeID, nullptr);
+                    param.setProperty ("value", 0.0f, nullptr);
+                    state.appendChild (param, nullptr);
+                }
+            }
+            apvts.replaceState (state);
         }
     const auto slots = getActiveBandSlots();
     setSelectedBand (slots.empty() ? -1 : slots.front());
@@ -386,12 +432,13 @@ juce::Result ParaDynAudioProcessor::applyMatchEQ()
     if (fit.error.isNotEmpty()) return juce::Result::fail (fit.error);
     const juce::ScopedLock lock (matchUndoLock);
     matchUndo.clear();
-    // Snapshot only parameters that Match changes. Output gain and unrelated
-    // controls remain independently editable before an Undo Match.
+    // Snapshot all parameters that Match changes (including dynamic controls and range).
     for (int slot = 0; slot < ParaDynConstants::maxBands; ++slot)
         for (const auto& id : { ParamIDs::active (slot), ParamIDs::frequency (slot), ParamIDs::gain (slot),
                                ParamIDs::q (slot), ParamIDs::filterType (slot), ParamIDs::filterSlope (slot),
                                ParamIDs::channelMode (slot), ParamIDs::dynamicEnabled (slot),
+                               ParamIDs::threshold (slot), ParamIDs::ratio (slot), ParamIDs::attack (slot),
+                               ParamIDs::release (slot), ParamIDs::knee (slot), ParamIDs::range (slot),
                                ParamIDs::solo (slot), ParamIDs::mute (slot) })
             matchUndo.emplace_back (id, apvts.getRawParameterValue (id)->load());
 
@@ -399,6 +446,7 @@ juce::Result ParaDynAudioProcessor::applyMatchEQ()
     {
         setMatchParameter (ParamIDs::active (slot), 0.0f);
         setMatchParameter (ParamIDs::solo (slot), 0.0f);
+        setMatchParameter (ParamIDs::range (slot), 0.0f); // clear range for all slots
     }
     for (size_t i = 0; i < fit.bands.size(); ++i)
     {
@@ -410,7 +458,13 @@ juce::Result ParaDynAudioProcessor::applyMatchEQ()
         setMatchParameter (ParamIDs::filterType (slot), (float) FilterType::Bell);
         setMatchParameter (ParamIDs::filterSlope (slot), (float) FilterSlope::Slope12);
         setMatchParameter (ParamIDs::channelMode (slot), (float) ChannelMode::Stereo);
-        setMatchParameter (ParamIDs::dynamicEnabled (slot), 0.0f);
+        setMatchParameter (ParamIDs::dynamicEnabled (slot), band.dynamic ? 1.0f : 0.0f);
+        setMatchParameter (ParamIDs::threshold (slot), band.thresholdDb);
+        setMatchParameter (ParamIDs::ratio (slot), band.ratio);
+        setMatchParameter (ParamIDs::attack (slot), band.attackMs);
+        setMatchParameter (ParamIDs::release (slot), band.releaseMs);
+        setMatchParameter (ParamIDs::knee (slot), band.kneeDb);
+        setMatchParameter (ParamIDs::range (slot), band.rangeDb);
         setMatchParameter (ParamIDs::mute (slot), 0.0f);
         setMatchParameter (ParamIDs::active (slot), 1.0f);
     }

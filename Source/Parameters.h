@@ -87,4 +87,9 @@ namespace ParamIDs
     inline juce::String knee (int i) { return "knee" + juce::String (i); }
     inline juce::String solo (int i) { return "solo" + juce::String (i); }
     inline juce::String mute (int i) { return "mute" + juce::String (i); }
+    // Per-band maximum dynamic gain reduction, in dB. 0 means "unlimited" (legacy
+    // behaviour: the detector's reduction is applied verbatim). Appended to the
+    // parameter layout AFTER the main per-band loop so existing host parameter
+    // indices never shift. See createParameterLayout().
+    inline juce::String range (int i) { return "range" + juce::String (i); }
 }

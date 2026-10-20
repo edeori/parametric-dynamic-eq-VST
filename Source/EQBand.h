@@ -43,6 +43,9 @@ public:
         // skipping every other band while still passing the rest of the signal
         // through this one band's boost/cut, which is silent whenever gain is small).
         bool soloListen = false;
+        // Maximum dynamic gain reduction in dB. 0 = unlimited (legacy: full detector output
+        // applied verbatim). > 0 caps how much the dynamic cut can deepen beyond the static gain.
+        float rangeDb = 0.0f;
     };
 
     void prepare (double sampleRate) noexcept;

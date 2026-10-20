@@ -65,6 +65,7 @@ public:
     bool removeBand (int slot);
     void setSolo (int slot, bool shouldBeSoloed) noexcept;
     bool isBandSoloed (int slot) const noexcept;
+    bool isBandMuted (int slot) const noexcept;
 
     float getBandDynamicReductionDb (int slot) const noexcept;
     EQBand::Params getBandParams (int slot) const noexcept;
@@ -101,6 +102,9 @@ private:
     std::array<std::atomic<float>*, ParaDynConstants::maxBands> kneeParams {};
     std::array<std::atomic<float>*, ParaDynConstants::maxBands> soloParams {};
     std::array<std::atomic<float>*, ParaDynConstants::maxBands> muteParams {};
+    // range params are appended after the main per-band loop in createParameterLayout()
+    // so that existing host parameter indices never shift.
+    std::array<std::atomic<float>*, ParaDynConstants::maxBands> rangeParams {};
     std::atomic<float>* bypassParam = nullptr;
     std::atomic<float>* outputParam = nullptr;
     std::atomic<float>* oversamplingParam = nullptr;

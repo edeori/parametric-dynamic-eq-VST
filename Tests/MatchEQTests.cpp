@@ -1,4 +1,5 @@
 #include "../Source/MatchEQ.h"
+#include "MatchEQFixtures.h"
 #include "../Source/SVFilter.h"
 #include <juce_core/juce_core.h>
 #include <algorithm>
@@ -156,6 +157,88 @@ namespace
         }
     }
 
+    void testAutomaticDynamics()
+    {
+        using namespace MatchEQFixtures;
+        auto match = std::make_unique<MatchEQ>();
+        capture (*match, MatchEQ::Capture::reference, Signal::reference);
+        capture (*match, MatchEQ::Capture::target, Signal::steadyResonance);
+        auto fit = match->fit (48000.0);
+        require (fit.error.isEmpty() && combined (fit, 1000, 48000) < -1.0,
+                 "steady resonance receives a meaningful static cut");
+        require (dynamicCount (fit) == 0, "steady resonance does not need automatic dynamics");
+
+        capture (*match, MatchEQ::Capture::target, Signal::pumping);
+        fit = match->fit (48000.0);
+        require (fit.error.isEmpty() && dynamicCount (fit) == 0,
+                 "broadband volume pumping does not create dynamic EQ bands");
+
+        capture (*match, MatchEQ::Capture::target, Signal::intermittentResonance, 48000.0, true);
+        const auto profiles = match->getProfiles();
+        require (profiles[1].temporal.valid, "antiphase stereo retains valid temporal analysis");
+        fit = match->fit (48000.0);
+        require (fit.error.isEmpty() && dynamicCount (fit) > 0 && dynamicCount (fit) <= 3,
+                 "real intermittent resonance selectively enables automatic dynamics");
+        bool nearResonance = false;
+        for (const auto& band : fit.bands)
+            if (band.dynamic)
+            {
+                nearResonance |= band.frequencyHz > 500.0f && band.frequencyHz < 2000.0f;
+                require (band.gainDb < 0 && band.rangeDb >= 0.01f && band.thresholdDb >= -60 && band.thresholdDb <= 0,
+                         "automatic dynamics has editable static cut, range and valid threshold");
+            }
+        require (nearResonance, "automatic dynamic cut addresses the intermittent resonance region");
+
+        for (const auto rate : { 32000.0, 48000.0, 192000.0 })
+        {
+            auto bounded = MatchEQ::fitProfiles (profiles[0], profiles[1], { 100, 0.5f, 3 }, rate);
+            require (bounded.error.isEmpty(), "automatic dynamics fits across processing sample rates");
+            for (int point = 0; point < 1024; ++point)
+            {
+                const auto hz = 20.0 * std::pow (std::min (20000.0, rate * 0.45) / 20.0, point / 1023.0);
+                double resting = 0, reduced = 0;
+                for (auto band : bounded.bands)
+                {
+                    resting += MatchEQ::responseDb (band, hz, rate);
+                    if (band.dynamic) band.gainDb -= band.rangeDb;
+                    reduced += MatchEQ::responseDb (band, hz, rate);
+                }
+                if (! std::isfinite (resting) || ! std::isfinite (reduced)
+                    || std::abs (resting) > 3.015 || std::abs (reduced) > 3.015)
+                    throw std::runtime_error ("static and fully reduced Match exceed correction limit");
+            }
+        }
+        require (true, "combined static and fully dynamic corrections both respect Max +/-");
+        const auto zero = MatchEQ::fitProfiles (profiles[0], profiles[1], { 0, 0.5f, 9 }, 48000);
+        require (dynamicCount (zero) == 0 && std::abs (combined (zero, 1000, 48000)) < 0.001,
+                 "Amount zero disables both static correction and automatic dynamics");
+
+        auto state = match->saveState();
+        auto restored = std::make_unique<MatchEQ>();
+        restored->restoreState (&state);
+        require (restored->getProfiles()[1].temporal.valid
+                 && dynamicCount (restored->fit (48000)) == dynamicCount (fit),
+                 "temporal stats and automatic decisions survive state roundtrip");
+        auto* temporal = state.getChildByName ("Target")->getChildByName ("Temporal");
+        require (temporal != nullptr, "target state contains temporal analysis");
+        temporal->getFirstChildElement()->setAttribute ("r", "nan");
+        restored->restoreState (&state);
+        require (restored->getStatus().hasTarget && ! restored->getProfiles()[1].temporal.valid
+                 && dynamicCount (restored->fit (48000)) == 0,
+                 "malformed optional temporal data falls back to valid static matching");
+
+        capture (*match, MatchEQ::Capture::target, Signal::intermittentResonance, 48000, false, 4);
+        require (match->getStatus().hasTarget && match->getStatus().targetNeedsRelearnForDynamics
+                 && dynamicCount (match->fit (48000)) == 0,
+                 "short but valid capture remains static and requests longer target learning");
+
+        // Low-rate target must not require statistics for grid frequencies above Nyquist.
+        capture (*match, MatchEQ::Capture::reference, Signal::reference, 16000, false, 4);
+        capture (*match, MatchEQ::Capture::target, Signal::intermittentResonance, 16000, false, 4);
+        require (match->getProfiles()[1].temporal.valid && match->fit (16000).error.isEmpty(),
+                 "low sample rate capture supports temporal analysis below Nyquist");
+    }
+
     void testCaptureAndPersistence()
     {
         auto match = std::make_unique<MatchEQ>();
@@ -254,6 +337,7 @@ int main()
 {
     try
     {
+        testAutomaticDynamics();
         testFitting();
         testResponseAgainstAudio();
         testCaptureAndPersistence();

@@ -10,7 +10,9 @@ MatchEQPanel::MatchEQPanel (ParaDynAudioProcessor& owner) : processor (owner)
     reference.setTooltip ("Play a representative passage. Learns the input before EQ; stops after 12 seconds of audio.");
     target.setTooltip ("Learn the destination track's input before EQ. The reference is preserved.");
     stop.setTooltip ("Keep the analysed audio (minimum 1 second). Silence is ignored.");
-    apply.setTooltip ("Replace current EQ bands with 16 editable stereo bells. Undo Match restores the previous bands.");
+    apply.setTooltip ("Replace current EQ bands with 16 editable stereo bells. Bands with intermittent content "
+                      "(requires 3s+ target capture) gain automatic dynamic mode; Range caps reduction depth, "
+                      "0 = unlimited. Undo Match restores the previous bands.");
     undo.setTooltip ("Restore the EQ bands from before the most recent Apply Match.");
     save.setTooltip ("Save the learned reference for use in another plugin instance or project.");
     reference.onClick = [this] { actionMessage.clear(); processor.getMatchEQ().startCapture (MatchEQ::Capture::reference); timerCallback(); };
@@ -19,10 +21,19 @@ MatchEQPanel::MatchEQPanel (ParaDynAudioProcessor& owner) : processor (owner)
     apply.onClick = [this]
     {
         const auto result = processor.applyMatchEQ();
-        actionMessage = result.wasOk() ? "Match applied. Bands are editable; change options and Apply again to refit."
-                                      : result.getErrorMessage();
-        if (result.wasOk() && processor.apvts.getRawParameterValue (ParamIDs::bypass)->load() >= 0.5f)
-            actionMessage = "Match applied. Turn off Bypass to hear the correction.";
+        if (result.wasOk())
+        {
+            int dynCount = 0;
+            for (auto slot : processor.getActiveBandSlots())
+                if (processor.getBandParams (slot).dynamicEnabled) ++dynCount;
+            actionMessage = "Match applied";
+            if (dynCount > 0) actionMessage += " (" + juce::String (dynCount) + " dynamic)";
+            actionMessage += ". Bands are editable.";
+            if (processor.apvts.getRawParameterValue (ParamIDs::bypass)->load() >= 0.5f)
+                actionMessage = "Match applied. Turn off Bypass to hear the correction.";
+        }
+        else
+            actionMessage = result.getErrorMessage();
         timerCallback();
     };
     undo.onClick = [this]
@@ -101,6 +112,8 @@ void MatchEQPanel::timerCallback()
     if (learning) text += "  " + juce::String (state.seconds, 1) + " / 12 s - play audio, then Stop & Keep.";
     else text = juce::String (state.hasReference ? "Ref: ready  |  " : "Ref: empty  |  ")
               + (state.hasTarget ? "Target: ready  |  " : "Target: empty  |  ") + text;
+    if (state.targetNeedsRelearnForDynamics)
+        text += " | Relearn Target for at least 3 s for automatic dynamics.";
     status.setText (text, juce::dontSendNotification);
     status.setTooltip (text);
 }
